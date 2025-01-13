@@ -70,3 +70,5 @@ There is also a separate command if you don't want to immediately pay the invoic
     * ***invstring***: the address you want to pay e.g. `user@domain.com` or `LNURL1DP6[..]6C72PP7X`
     * ***amount_msat***: the amount in msat you intend to pay. Always required for safety checks.
     * ***message***: an optional message you intend to send to the payee. This is either put in the *comment* field for LNURL based methods or in the *payer_note* for bolt12 based methods.
+
+Keep in mind that using *payany* may cause clearnet connections to fetch the invoices. DNS lookups for bip353 addresses use Google's DNS by default.
