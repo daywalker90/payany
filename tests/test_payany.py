@@ -21,7 +21,7 @@ def test_payany_with_offer(node_factory, get_plugin):  # noqa: F811
         wait_for_announce=True,
         opts=opts,
     )
-    offer = l2.rpc.call("offer", {"amount": "any"})
+    offer = l2.rpc.call("offer", {"amount": "any", "description": "testpayany"})
     result = l1.rpc.call(
         "payany",
         {
@@ -59,7 +59,7 @@ def test_xpay_supercharged(node_factory, get_plugin):  # noqa: F811
         wait_for_announce=True,
         opts=opts,
     )
-    offer = l2.rpc.call("offer", {"amount": "any"})
+    offer = l2.rpc.call("offer", {"amount": "any", "description": "testpayany"})
     result = l1.rpc.call(
         "xpay", {"invstring": offer["bolt12"], "amount_msat": 3_000, "message": "test3"}
     )
@@ -90,7 +90,7 @@ def test_pay_supercharged(node_factory, get_plugin):  # noqa: F811
         wait_for_announce=True,
         opts=opts,
     )
-    offer = l2.rpc.call("offer", {"amount": "any"})
+    offer = l2.rpc.call("offer", {"amount": "any", "description": "testpayany"})
     result = l1.rpc.call(
         "pay", {"bolt11": offer["bolt12"], "amount_msat": 3_000, "message": "test3"}
     )
