@@ -1,13 +1,13 @@
-import string
-import random
 import logging
 import os
-import pytest
+import random
+import string
 from pathlib import Path
 
+import pytest
+
 RUST_PROFILE = os.environ.get("RUST_PROFILE", "debug")
-COMPILED_PATH = Path.cwd() / "target" / RUST_PROFILE / \
-    "payany"
+COMPILED_PATH = Path.cwd() / "target" / RUST_PROFILE / "payany"
 DOWNLOAD_PATH = Path.cwd() / "tests" / "payany"
 
 
@@ -23,8 +23,9 @@ def get_plugin(directory):
 
 def generate_random_label():
     label_length = 8
-    random_label = ''.join(random.choice(string.ascii_letters)
-                           for _ in range(label_length))
+    random_label = "".join(
+        random.choice(string.ascii_letters) for _ in range(label_length)
+    )
     return random_label
 
 
@@ -39,3 +40,12 @@ def pay_with_thread(rpc, bolt11):
     except Exception as e:
         LOGGER.debug(f"holdinvoice: Error paying payment hash:{e}")
         pass
+
+
+def experimental_offers_check(node_factory):
+    l1 = node_factory.get_node()
+    version = l1.rpc.getinfo()["version"]
+    if version.startswith("v24.0"):
+        return True
+    else:
+        return False

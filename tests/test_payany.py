@@ -5,16 +5,21 @@ import logging
 import pytest
 from pyln.client import RpcError
 from pyln.testing.fixtures import *  # noqa: F403
-from util import get_plugin  # noqa: F401
+from util import experimental_offers_check, get_plugin  # noqa: F401
 
 LOGGER = logging.getLogger(__name__)
 
 
 def test_payany_with_offer(node_factory, get_plugin):  # noqa: F811
+    opts = [{"plugin": get_plugin, "log-level": "debug"}, {"log-level": "debug"}]
+    if experimental_offers_check(node_factory):
+        opts[0]["experimental-offers"] = None
+        opts[1]["experimental-offers"] = None
+
     l1, l2 = node_factory.line_graph(
         2,
         wait_for_announce=True,
-        opts=[{"plugin": get_plugin, "log-level": "debug"}, {"log-level": "debug"}],
+        opts=opts,
     )
     offer = l2.rpc.call("offer", {"amount": "any"})
     result = l1.rpc.call(
@@ -44,10 +49,15 @@ def test_payany_with_offer(node_factory, get_plugin):  # noqa: F811
 
 
 def test_xpay_supercharged(node_factory, get_plugin):  # noqa: F811
+    opts = [{"plugin": get_plugin, "log-level": "debug"}, {"log-level": "debug"}]
+    if experimental_offers_check(node_factory):
+        opts[0]["experimental-offers"] = None
+        opts[1]["experimental-offers"] = None
+
     l1, l2 = node_factory.line_graph(
         2,
         wait_for_announce=True,
-        opts=[{"plugin": get_plugin, "log-level": "debug"}, {"log-level": "debug"}],
+        opts=opts,
     )
     offer = l2.rpc.call("offer", {"amount": "any"})
     result = l1.rpc.call(
@@ -70,10 +80,15 @@ def test_xpay_supercharged(node_factory, get_plugin):  # noqa: F811
 
 
 def test_pay_supercharged(node_factory, get_plugin):  # noqa: F811
+    opts = [{"plugin": get_plugin, "log-level": "debug"}, {"log-level": "debug"}]
+    if experimental_offers_check(node_factory):
+        opts[0]["experimental-offers"] = None
+        opts[1]["experimental-offers"] = None
+
     l1, l2 = node_factory.line_graph(
         2,
         wait_for_announce=True,
-        opts=[{"plugin": get_plugin, "log-level": "debug"}, {"log-level": "debug"}],
+        opts=opts,
     )
     offer = l2.rpc.call("offer", {"amount": "any"})
     result = l1.rpc.call(
