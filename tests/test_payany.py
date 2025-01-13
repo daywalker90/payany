@@ -59,6 +59,9 @@ def test_xpay_supercharged(node_factory, get_plugin):  # noqa: F811
         wait_for_announce=True,
         opts=opts,
     )
+    version = l1.rpc.getinfo()["version"]
+    if version.startswith("v24.0"):
+        return
     offer = l2.rpc.call("offer", {"amount": "any", "description": "testpayany"})
     result = l1.rpc.call(
         "xpay", {"invstring": offer["bolt12"], "amount_msat": 3_000, "message": "test3"}
