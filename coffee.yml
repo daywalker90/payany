@@ -1,9 +1,9 @@
 plugin:
   name: payany
-  version: 4.0.1
+  version: 0.1.0
   lang: rust
   install: |
     cargo build --release && cp target/release/payany . && cargo clean
   main: payany
 tipping:
-  bolt12: lno1pgrhxatdd4shyucjpdjxz7thv9kxketj8ycpvggrsrhsyz0lrdrv8z3he4q0vy73mt37hfyp4yy5t8tvzs62petwtkxq
+  bolt12: lno1pgr8qctev9h8j93pqwqw7qsflud5dsu2xlx5pasn68dw86aysx5sj3vads2rfg89dewcc
