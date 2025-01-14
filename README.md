@@ -2,6 +2,8 @@
 
 [![main on CLN v24.11.1](https://github.com/daywalker90/payany/actions/workflows/main_v24.11.yml/badge.svg?branch=main)](https://github.com/daywalker90/payany/actions/workflows/main_v24.11.yml) [![main on CLN v24.08.2](https://github.com/daywalker90/payany/actions/workflows/main_v24.08.yml/badge.svg?branch=main)](https://github.com/daywalker90/payany/actions/workflows/main_v24.08.yml) [![main on CLN v24.05](https://github.com/daywalker90/payany/actions/workflows/main_v24.05.yml/badge.svg?branch=main)](https://github.com/daywalker90/payany/actions/workflows/main_v24.05.yml)
 
+Failures in CLN 24.08.2 are a memleak error from CLN on shutdown.
+
 # payany
 A core lightning plugin to supercharge CLN's xpay/pay to automatically fetch invoices for all the static lightning payment addresses out there.
 
