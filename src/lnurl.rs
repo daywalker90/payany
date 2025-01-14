@@ -55,7 +55,15 @@ pub async fn lnurl_fetch_invoice(
         if let Some(cmt) = lnurl_config.comment_allowed {
             if cmt >= (msg.len() as u64) {
                 callback_url += &format!("&comment={}", msg);
+            } else {
+                return Err(anyhow!(
+                    "LNURL: message too long for this address! {}>{}",
+                    msg.len(),
+                    cmt
+                ));
             }
+        } else {
+            return Err(anyhow!("LNURL: message not supported for this address!"));
         }
     }
     let callback_response = client
@@ -84,7 +92,9 @@ pub async fn lnurl_fetch_invoice(
         ));
     }
     if invoice_decoded.description_hash.is_none() {
-        return Err(anyhow!("Lnurl: missing description hash!"));
+        // Some servers are not including a description hash
+        log::info!("Lnurl: missing description hash!");
+        // return Err(anyhow!("Lnurl: missing description hash!"));
     } else {
         let metadata_hashed = Sha256::const_hash(lnurl_config.metadata.as_bytes());
         log::debug!(
@@ -109,7 +119,7 @@ pub async fn lnurl_fetch_invoice(
 fn validate_lnurl_config(
     lnurl_config: &LnurlpConfig,
     amount_msat: Amount,
-    lnaddress: Option<String>,
+    _lnaddress: Option<String>,
 ) -> Result<(), Error> {
     if !lnurl_config.tag.eq_ignore_ascii_case("payRequest") {
         return Err(anyhow!(
@@ -132,54 +142,55 @@ fn validate_lnurl_config(
             lnurl_config.max_sendable
         ));
     }
-    if let Some(lnaddr) = lnaddress {
-        let metadata_json: serde_json::Value = serde_json::from_str(&lnurl_config.metadata)?;
-        let mut lnaddress_found = false;
-        let metadata_outer_array = if let serde_json::Value::Array(meta_arr) = metadata_json {
-            meta_arr
-        } else {
-            return Err(anyhow!("metadata not an array!: {}", lnurl_config.metadata));
-        };
+    // Quite a few servers in the wild are not including the text/identifier or text/email data..
+    // if let Some(lnaddr) = lnaddress {
+    //     let metadata_json: serde_json::Value = serde_json::from_str(&lnurl_config.metadata)?;
+    //     let mut lnaddress_found = false;
+    //     let metadata_outer_array = if let serde_json::Value::Array(meta_arr) = metadata_json {
+    //         meta_arr
+    //     } else {
+    //         return Err(anyhow!("metadata not an array!: {}", lnurl_config.metadata));
+    //     };
 
-        for meta in metadata_outer_array {
-            let metadata_inner_array = if let serde_json::Value::Array(meta_inners) = meta {
-                meta_inners
-            } else {
-                return Err(anyhow!("inner metadata not an array!: {}", &meta));
-            };
-            if metadata_inner_array.len() != 2 {
-                return Err(anyhow!(
-                    "inner metadata array is not of length 2!: {:?}",
-                    metadata_inner_array
-                ));
-            }
-            let data_type = metadata_inner_array
-                .first()
-                .unwrap()
-                .as_str()
-                .ok_or(anyhow!("inner metadata identifier is not a string:"))?;
-            if !data_type.eq_ignore_ascii_case("text/identifier")
-                && !data_type.eq_ignore_ascii_case("text/email")
-            {
-                continue;
-            }
-            let data = metadata_inner_array
-                .get(1)
-                .unwrap()
-                .as_str()
-                .ok_or(anyhow!("inner metadata content is not a string:"))?;
-            if data.eq_ignore_ascii_case(&lnaddr) {
-                lnaddress_found = true;
-            }
-        }
+    //     for meta in metadata_outer_array {
+    //         let metadata_inner_array = if let serde_json::Value::Array(meta_inners) = meta {
+    //             meta_inners
+    //         } else {
+    //             return Err(anyhow!("inner metadata not an array!: {}", &meta));
+    //         };
+    //         if metadata_inner_array.len() != 2 {
+    //             return Err(anyhow!(
+    //                 "inner metadata array is not of length 2!: {:?}",
+    //                 metadata_inner_array
+    //             ));
+    //         }
+    //         let data_type = metadata_inner_array
+    //             .first()
+    //             .unwrap()
+    //             .as_str()
+    //             .ok_or(anyhow!("inner metadata identifier is not a string:"))?;
+    //         if !data_type.eq_ignore_ascii_case("text/identifier")
+    //             && !data_type.eq_ignore_ascii_case("text/email")
+    //         {
+    //             continue;
+    //         }
+    //         let data = metadata_inner_array
+    //             .get(1)
+    //             .unwrap()
+    //             .as_str()
+    //             .ok_or(anyhow!("inner metadata content is not a string:"))?;
+    //         if data.eq_ignore_ascii_case(&lnaddr) {
+    //             lnaddress_found = true;
+    //         }
+    //     }
 
-        if !lnaddress_found {
-            return Err(anyhow!(
-                "Lnaddress not found in metadata!: {}",
-                lnurl_config.metadata
-            ));
-        }
-    }
+    //     if !lnaddress_found {
+    //         return Err(anyhow!(
+    //             "Lnaddress not found in metadata!: {}",
+    //             lnurl_config.metadata
+    //         ));
+    //     }
+    // }
 
     Ok(())
 }
