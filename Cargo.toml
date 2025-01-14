@@ -23,3 +23,10 @@ bech32 = "0.11"
 [dependencies.tokio]
 features = ["fs","net"]
 version = "1"
+
+[profile.optimized]
+inherits = "release"
+strip = "debuginfo"
+codegen-units = 1
+lto = "fat"
+debug = false
