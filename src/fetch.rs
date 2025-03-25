@@ -4,36 +4,38 @@ use cln_rpc::primitives::Amount;
 use serde_json::Map;
 
 use crate::{
-    hooks::Paycmd,
-    lnurl::{lnurl_fetch_invoice, resolve_lnurl},
-    offer::{bip353_flow, fetch_offer_inv},
+    lnurl::{fetch_invoice_lnurl, resolve_lnurl},
+    offer::{fetch_invoice_bip353, fetch_invoice_bolt12},
+    structs::{Paycmd, PluginState, URI_SCHEMES},
 };
 
 pub async fn resolve_invstring(
-    plugin: Plugin<()>,
+    plugin: Plugin<PluginState>,
     params: &mut Map<String, serde_json::Value>,
     paycmd: Paycmd,
-) -> Result<Map<String, serde_json::Value>, Error> {
+) -> Result<(), Error> {
     let invstring_name = match paycmd {
         Paycmd::Pay => "bolt11",
-        Paycmd::Xpay => "invstring",
+        Paycmd::Xpay | Paycmd::Renepay => "invstring",
     };
     let invstring_lower_presplit = if let Some(invstr) = params.get(invstring_name) {
-        invstr.as_str().unwrap().to_string().to_lowercase()
+        invstr.as_str().unwrap().to_owned().to_lowercase()
     } else {
-        return Err(anyhow!("missing {} param", invstring_name));
+        return Err(anyhow!("missing required parameter: {}", invstring_name));
     };
-    let invstring_lower = if let Some((_hrp, invstr)) = invstring_lower_presplit.split_once(":") {
-        invstr.to_string()
-    } else {
-        invstring_lower_presplit
-    };
+    let mut invstring_lower = invstring_lower_presplit;
+    for uri_scheme in URI_SCHEMES {
+        if let Some(stripped) = invstring_lower.strip_prefix(uri_scheme) {
+            invstring_lower = stripped.to_owned();
+            break;
+        }
+    }
     let amount_msat = params
         .get("amount_msat")
         .map(|amt| Amount::from_msat(amt.as_u64().unwrap()));
     let message = params
         .get("message")
-        .map(|msg| msg.as_str().unwrap().to_string());
+        .map(|msg| msg.as_str().unwrap().to_owned());
 
     if invstring_lower.starts_with("lnurl") {
         log::debug!("lnurl detected");
@@ -55,7 +57,7 @@ pub async fn resolve_invstring(
         if amount_msat.is_none() {
             return Err(anyhow!("lnaddress: missing amount_msat"));
         }
-        return fetch_ln_address(
+        return resolve_lnaddress(
             plugin,
             invstring_name,
             invstring_lower,
@@ -66,32 +68,29 @@ pub async fn resolve_invstring(
         .await;
     } else if invstring_lower.starts_with("lno") {
         log::debug!("bolt12 offer detected");
-        if amount_msat.is_none() {
-            return Err(anyhow!("offer: missing amount_msat"));
-        }
-        return fetch_offer_inv(
+        return fetch_invoice_bolt12(
             plugin,
             invstring_name,
             invstring_lower,
-            amount_msat.unwrap(),
+            amount_msat,
             message,
             params,
         )
         .await;
     } else {
         log::debug!("regular invoice forwarded");
-        return Ok(params.clone());
+        return Ok(());
     }
 }
 
-async fn fetch_ln_address(
-    plugin: Plugin<()>,
+async fn resolve_lnaddress(
+    plugin: Plugin<PluginState>,
     invstring_name: &str,
     lnaddress: String,
-    amount: Amount,
+    amount_msat: Amount,
     message: Option<String>,
     params: &mut Map<String, serde_json::Value>,
-) -> Result<Map<String, serde_json::Value>, Error> {
+) -> Result<(), Error> {
     let address_parts = lnaddress.split("@").collect::<Vec<&str>>();
 
     if address_parts.len() != 2 {
@@ -102,29 +101,33 @@ async fn fetch_ln_address(
 
     let domain = address_parts.get(1).unwrap();
 
-    let bip353_error = match bip353_flow(
+    let bip353_error = match fetch_invoice_bip353(
         plugin.clone(),
         invstring_name,
         user,
         domain,
-        amount,
+        amount_msat,
         message.clone(),
         params,
     )
     .await
     {
-        Ok(bip353) => return Ok(bip353),
+        Ok(()) => return Ok(()),
         Err(e) => e,
     };
 
-    let ln_service_url = format!("https://{domain}/.well-known/lnurlp/{user}");
+    let ln_service_url = if domain.contains("localhost") || domain.contains("127.0.0.1") {
+        format!("http://{domain}/.well-known/lnurlp/{user}")
+    } else {
+        format!("https://{domain}/.well-known/lnurlp/{user}")
+    };
 
-    match lnurl_fetch_invoice(
+    match fetch_invoice_lnurl(
         plugin,
         invstring_name,
         ln_service_url,
         Some(lnaddress),
-        amount,
+        amount_msat,
         message,
         params,
     )

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{collections::HashSet, net::SocketAddr, path::Path};
 
 use anyhow::{anyhow, Error};
 use cln_plugin::Plugin;
@@ -10,19 +10,23 @@ use cln_rpc::{
 use hickory_resolver::{
     config::{ResolverConfig, ResolverOpts},
     lookup::Lookup,
+    name_server::TokioConnectionProvider,
     proto::{dnssec, rr::RecordType},
-    Resolver,
+    system_conf::read_system_conf,
+    TokioResolver,
 };
 use serde_json::Map;
 
-pub async fn fetch_offer_inv(
-    plugin: Plugin<()>,
+use crate::PluginState;
+
+pub async fn fetch_invoice_bolt12(
+    plugin: Plugin<PluginState>,
     invstring_name: &str,
     invstring: String,
-    amount_msat: Amount,
+    amount_msat: Option<Amount>,
     message: Option<String>,
     params: &mut Map<String, serde_json::Value>,
-) -> Result<Map<String, serde_json::Value>, Error> {
+) -> Result<(), Error> {
     let mut rpc = ClnRpc::new(
         Path::new(&plugin.configuration().lightning_dir).join(plugin.configuration().rpc_file),
     )
@@ -34,20 +38,35 @@ pub async fn fetch_offer_inv(
         })
         .await?;
 
-    if offer_decoded.offer_amount_msat.is_some()
-        && offer_decoded.offer_amount_msat.unwrap().msat() != amount_msat.msat()
-    {
+    if offer_decoded.offer_currency.is_some() {
         return Err(anyhow!(
-            "offer: not matching stated amount_msat: {} != {}",
-            offer_decoded.offer_amount_msat.unwrap().msat(),
-            amount_msat.msat()
+            "offers with non-BTC currencies are not supported by payany, \
+        please fetch the invoice yourself"
         ));
+    }
+
+    if offer_decoded.offer_amount_msat.is_none() && amount_msat.is_none() {
+        return Err(anyhow!(
+            "offer has `any` amount, must specify `amount_msat`!"
+        ));
+    }
+
+    if let Some(offer_amt) = offer_decoded.offer_amount_msat {
+        if let Some(amt) = amount_msat {
+            if offer_amt.msat() != amt.msat() {
+                return Err(anyhow!(
+                    "offer: not matching stated amount_msat: {} != {}",
+                    offer_decoded.offer_amount_msat.unwrap().msat(),
+                    amt.msat()
+                ));
+            }
+        }
     }
 
     let fetch_amount_msat = if offer_decoded.offer_amount_msat.is_some() {
         None
     } else {
-        Some(amount_msat)
+        Some(amount_msat.unwrap())
     };
     let invoice = rpc
         .call_typed(&FetchinvoiceRequest {
@@ -60,6 +79,7 @@ pub async fn fetch_offer_inv(
             recurrence_start: None,
             timeout: None,
             offer: invstring,
+            bip353: None,
         })
         .await?;
 
@@ -69,40 +89,73 @@ pub async fn fetch_offer_inv(
         })
         .await?;
 
-    if invoice_decoded.invoice_amount_msat.unwrap().msat() != amount_msat.msat() {
-        return Err(anyhow!(
-            "offers: got invoice with different amount_msat!: {} != {}",
-            invoice_decoded.invoice_amount_msat.unwrap().msat(),
-            amount_msat.msat()
-        ));
+    if let Some(offer_amt) = offer_decoded.offer_amount_msat {
+        if invoice_decoded.invoice_amount_msat.unwrap().msat() != offer_amt.msat() {
+            return Err(anyhow!(
+                "offers: got invoice with different amount_msat than offer!: {} != {}",
+                invoice_decoded.invoice_amount_msat.unwrap().msat(),
+                offer_amt.msat()
+            ));
+        }
+    }
+    if let Some(amt) = amount_msat {
+        if invoice_decoded.invoice_amount_msat.unwrap().msat() != amt.msat() {
+            return Err(anyhow!(
+                "offers: got invoice with different amount_msat than specified!: {} != {}",
+                invoice_decoded.invoice_amount_msat.unwrap().msat(),
+                amt.msat()
+            ));
+        }
     }
 
     params.remove("amount_msat");
     *params.get_mut(invstring_name).unwrap() = serde_json::Value::String(invoice.invoice);
-    Ok(params.clone())
+    Ok(())
 }
 
-pub async fn bip353_flow(
-    plugin: Plugin<()>,
+pub async fn fetch_invoice_bip353(
+    plugin: Plugin<PluginState>,
     invstring_name: &str,
     user: &str,
     domain: &str,
     amount_msat: Amount,
     message: Option<String>,
     params: &mut Map<String, serde_json::Value>,
-) -> Result<Map<String, serde_json::Value>, Error> {
-    let mut resolver_opts = ResolverOpts::default();
+) -> Result<(), Error> {
+    let config = plugin.state().config.lock().clone();
+    let (resolver_config, mut resolver_opts) = match config.dns_server {
+        crate::structs::DnsServer::Google => (ResolverConfig::google(), ResolverOpts::default()),
+        crate::structs::DnsServer::Cloudflare => {
+            (ResolverConfig::cloudflare(), ResolverOpts::default())
+        }
+        crate::structs::DnsServer::Quad9 => (ResolverConfig::quad9(), ResolverOpts::default()),
+        crate::structs::DnsServer::System => read_system_conf()?,
+    };
     resolver_opts.validate = true;
-    let resolver = Resolver::tokio(ResolverConfig::default(), resolver_opts);
+    let mut resolver =
+        TokioResolver::builder_with_config(resolver_config, TokioConnectionProvider::default());
+    *resolver.options_mut() = resolver_opts;
+    let resolver = resolver.build();
+
+    log::debug!(
+        "Using {:?} as DNS server(s)",
+        resolver
+            .config()
+            .name_servers()
+            .iter()
+            .map(|ns| ns.socket_addr)
+            .collect::<HashSet<SocketAddr>>()
+    );
 
     let mut query = format!("{}.user._bitcoin-payment.{}", user, domain);
 
     'outer: loop {
         let lookup_response = resolver.lookup(query.clone(), RecordType::ANY).await?;
+        log::debug!("{:?}", lookup_response);
 
-        let mut bip21_found = None;
+        let mut bip21_result = None;
 
-        if !good_rrsig(&lookup_response) {
+        if !is_safe_rrsig_algo(&lookup_response) {
             return Err(anyhow!("DNSSEC signature is not secure!"));
         };
 
@@ -122,24 +175,24 @@ pub async fn bip353_flow(
                     if !txt.starts_with("bitcoin:") {
                         continue;
                     }
-                    if let Some(_bip21) = bip21_found {
+                    if let Some(_bip21) = bip21_result {
                         return Err(anyhow!("multiple bip21 entries found in txt records!"));
                     }
-                    bip21_found = Some(txt.split_once(":").unwrap().1.to_string())
+                    bip21_result = Some(txt.split_once(":").unwrap().1.to_owned())
                 }
             }
         }
 
-        if let Some(bip21) = bip21_found {
+        if let Some(bip21) = bip21_result {
             for bip21_param in bip21.split("?") {
                 if bip21_param.starts_with("lno=") {
-                    let offer = bip21_param.strip_prefix("lno=").unwrap().to_string();
+                    let offer = bip21_param.strip_prefix("lno=").unwrap().to_owned();
                     log::debug!("bip353 offer: {}", offer);
-                    return fetch_offer_inv(
+                    return fetch_invoice_bolt12(
                         plugin,
                         invstring_name,
                         offer,
-                        amount_msat,
+                        Some(amount_msat),
                         message,
                         params,
                     )
@@ -163,13 +216,20 @@ pub async fn bip353_flow(
         break;
     }
 
-    Err(anyhow!("bip353 offer not found"))
+    Err(anyhow!(
+        "bip353 offer not found or DNSSEC signatures not secure"
+    ))
 }
 
-fn good_rrsig(lookup_response: &Lookup) -> bool {
+fn is_safe_rrsig_algo(lookup_response: &Lookup) -> bool {
     for record in lookup_response.iter() {
         if let Some(dnssec_type) = record.as_dnssec() {
             if let Some(rrsig_type) = dnssec_type.as_rrsig() {
+                log::debug!(
+                    "rrsig algo:{} len:{}",
+                    rrsig_type.algorithm(),
+                    rrsig_type.sig().len()
+                );
                 match rrsig_type.algorithm() {
                     dnssec::Algorithm::RSASHA256 => return rrsig_type.sig().len() >= 128,
                     dnssec::Algorithm::RSASHA512 => return rrsig_type.sig().len() >= 128,

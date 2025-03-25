@@ -7,71 +7,60 @@ use cln_rpc::{
     primitives::{Amount, Sha256},
     ClnRpc,
 };
-use serde::{Deserialize, Serialize};
 use serde_json::Map;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct LnurlpConfig {
-    callback: String,
-    #[serde(rename = "maxSendable")]
-    max_sendable: u64,
-    #[serde(rename = "minSendable")]
-    min_sendable: u64,
-    metadata: String,
-    tag: String,
-    #[serde(rename = "commentAllowed")]
-    comment_allowed: Option<u64>,
-}
+use crate::structs::{LnurlpCallback, LnurlpConfig, PluginState};
 
-#[derive(Debug, Serialize, Deserialize)]
-struct LnurlpCallback {
-    pr: String,
-    routes: Vec<String>,
-}
-
-pub async fn lnurl_fetch_invoice(
-    plugin: Plugin<()>,
+pub async fn fetch_invoice_lnurl(
+    plugin: Plugin<PluginState>,
     invstring_name: &str,
     config_url: String,
     lnaddress: Option<String>,
     amount_msat: Amount,
     message: Option<String>,
     params: &mut Map<String, serde_json::Value>,
-) -> Result<Map<String, serde_json::Value>, Error> {
+) -> Result<(), Error> {
     let client = reqwest::Client::new();
-    let lnurl_config = client
-        .get(config_url)
-        .send()
-        .await?
+    let lnurlp_config_raw = client.get(config_url).send().await?;
+    if !lnurlp_config_raw.status().is_success() {
+        return Err(anyhow!(
+            "LNURL: got bad status for lnurl config: {}",
+            lnurlp_config_raw.status()
+        ));
+    }
+    log::debug!("lnurl config: {:?}", lnurlp_config_raw);
+    let lnurlp_config = lnurlp_config_raw
         .json::<LnurlpConfig>()
         .await
         .context("Not a valid LNURL config response")?;
-    log::debug!("lnurl config: {:?}", lnurl_config);
 
-    validate_lnurl_config(&lnurl_config, amount_msat, lnaddress)?;
+    let config = plugin.state().config.lock().clone();
 
-    let mut callback_url = format!("{}?amount={}", lnurl_config.callback, amount_msat.msat());
+    validate_lnurl_config(&lnurlp_config, amount_msat, lnaddress, config.strict_lnurl)?;
+
+    let mut callback_url = format!("{}?amount={}", lnurlp_config.callback, amount_msat.msat());
     if let Some(msg) = message {
-        if let Some(cmt) = lnurl_config.comment_allowed {
-            if cmt >= (msg.len() as u64) {
-                callback_url += &format!("&comment={}", msg);
-            } else {
-                return Err(anyhow!(
-                    "LNURL: message too long for this address! {}>{}",
-                    msg.len(),
-                    cmt
-                ));
-            }
+        let comment_length = lnurlp_config
+            .comment_allowed
+            .ok_or_else(|| anyhow!("LNURL: message not supported for this address!"))?;
+        if comment_length >= (msg.len() as u64) {
+            callback_url += &format!("&comment={}", msg);
         } else {
-            return Err(anyhow!("LNURL: message not supported for this address!"));
+            return Err(anyhow!(
+                "LNURL: message too long for this address! {}>{}",
+                msg.len(),
+                comment_length
+            ));
         }
     }
-    let callback_response = client
-        .get(callback_url)
-        .send()
-        .await?
-        .json::<LnurlpCallback>()
-        .await?;
+    let callback_response_raw = client.get(callback_url).send().await?;
+    if !callback_response_raw.status().is_success() {
+        return Err(anyhow!(
+            "LNURL: got bad status for invoice: {}",
+            callback_response_raw.status()
+        ));
+    }
+    let callback_response = callback_response_raw.json::<LnurlpCallback>().await?;
 
     let mut rpc = ClnRpc::new(
         Path::new(&plugin.configuration().lightning_dir).join(plugin.configuration().rpc_file),
@@ -92,14 +81,17 @@ pub async fn lnurl_fetch_invoice(
         ));
     }
     if invoice_decoded.description_hash.is_none() {
-        // Some servers are not including a description hash
-        log::info!(
-            "Lnurl: missing description hash, please report to lnaddress \
-            service provider they are violating the spec in LUD-06"
-        );
-        // return Err(anyhow!("Lnurl: missing description hash!"));
+        if config.strict_lnurl {
+            return Err(anyhow!("Strict mode: Lnurl: missing description hash!"));
+        } else {
+            // Some servers are not including a description hash
+            log::info!(
+                "Lnurl: missing description hash, please report to lnaddress \
+                service provider they are violating the spec in LUD-06"
+            );
+        }
     } else {
-        let metadata_hashed = Sha256::const_hash(lnurl_config.metadata.as_bytes());
+        let metadata_hashed = Sha256::const_hash(lnurlp_config.metadata.as_bytes());
         log::debug!(
             "Lnurl: metadata_hashed:{} description_hash:{}",
             metadata_hashed,
@@ -116,13 +108,14 @@ pub async fn lnurl_fetch_invoice(
 
     params.remove("amount_msat");
     *params.get_mut(invstring_name).unwrap() = serde_json::Value::String(callback_response.pr);
-    Ok(params.clone())
+    Ok(())
 }
 
 fn validate_lnurl_config(
     lnurl_config: &LnurlpConfig,
     amount_msat: Amount,
     lnaddress: Option<String>,
+    strict_lnurl: bool,
 ) -> Result<(), Error> {
     if !lnurl_config.tag.eq_ignore_ascii_case("payRequest") {
         return Err(anyhow!(
@@ -188,14 +181,17 @@ fn validate_lnurl_config(
 
         // Quite a few servers in the wild are not including the text/identifier or text/email data..
         if !lnaddress_found {
-            log::info!(
-                "Lnaddress not found in metadata, please report to lnaddress \
-            service provider they are violating the spec in LUD-16"
-            );
-            // return Err(anyhow!(
-            //     "Lnaddress not found in metadata!: {}",
-            //     lnurl_config.metadata
-            // ));
+            if strict_lnurl {
+                return Err(anyhow!(
+                    "Strict mode: Lnaddress not found in metadata!: {}",
+                    lnurl_config.metadata
+                ));
+            } else {
+                log::info!(
+                    "Lnaddress not found in metadata, please report to lnaddress \
+                service provider they are violating the spec in LUD-16"
+                );
+            }
         }
     }
 
@@ -203,19 +199,19 @@ fn validate_lnurl_config(
 }
 
 pub async fn resolve_lnurl(
-    plugin: Plugin<()>,
+    plugin: Plugin<PluginState>,
     invstring_name: &str,
     invstring: String,
     lnaddress: Option<String>,
     amount_msat: Amount,
     message: Option<String>,
     params: &mut Map<String, serde_json::Value>,
-) -> Result<Map<String, serde_json::Value>, Error> {
+) -> Result<(), Error> {
     let (hrp, config_url_bytes) = bech32::decode(&invstring)?;
     let config_url = String::from_utf8(config_url_bytes)?;
     log::debug!("lnurl hrp:{} url:{}", hrp, config_url);
 
-    lnurl_fetch_invoice(
+    fetch_invoice_lnurl(
         plugin,
         invstring_name,
         config_url,

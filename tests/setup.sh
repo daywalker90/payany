@@ -68,6 +68,28 @@ else
     exit 1
 fi
 
+# Need clnaddress for some tests
+CLNADDRESS_LATEST_RELEASE=$(curl -s "https://api.github.com/repos/daywalker90/clnaddress/releases/latest")
+CLNADDRESS_FILE_URL=$(echo "$CLNADDRESS_LATEST_RELEASE" | jq -r ".assets[] | select(.name | endswith(\"$platform_file_end\")) | .browser_download_url")
+
+if [ -z "$CLNADDRESS_FILE_URL" ]; then
+  echo "No clnaddress file found matching key: $platform_file_end"
+  exit 1
+fi
+
+clnaddress_archive=clnaddress-$platform_file_end
+
+if ! curl -L "$CLNADDRESS_FILE_URL" -o "$script_dir/$clnaddress_archive"; then
+    echo "Error downloading the file from $CLNADDRESS_FILE_URL" >&2
+    exit 1
+fi
+
+
+if ! tar -xzvf "$script_dir/$clnaddress_archive" -C "$script_dir"; then
+    echo "Error extracting the contents of $clnaddress_archive" >&2
+    exit 1
+fi
+
 # Function to check if a Python package is installed
 check_package() {
     python_exec="$1"

@@ -1,7 +1,8 @@
 [package]
 name = "payany"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+rust-version = "1.75"
 
 [dependencies]
 anyhow = "1.0"
@@ -10,15 +11,21 @@ log-panics = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-cln-rpc = "0.3"
-# cln-rpc = { path="../lightning/cln-rpc/", version = "^0.2" }
-cln-plugin = "0.3"
-# cln-plugin = { path="../lightning/plugins/", version = "^0.2" }
+cln-rpc = "0.4"
+# cln-rpc = { path="../../lightning/cln-rpc/", version = "^0.3" }
+cln-plugin = "0.4"
+# cln-plugin = { path="../../lightning/plugins/", version = "^0.3" }
 
 reqwest = { version = "0.12", default-features = false, features = ["http2", "json","rustls-tls"] }
-hickory-resolver = {version = "0.25.0-alpha.4", features =["dnssec-ring"]}
+hickory-resolver = {version = "0.25.1", features =["dnssec-ring"]}
 
 bech32 = "0.11"
+
+regex = "1"
+
+chrono = "0.4"
+
+parking_lot = "0.12"
 
 [dependencies.tokio]
 features = ["fs","net"]

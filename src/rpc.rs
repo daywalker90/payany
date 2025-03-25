@@ -1,14 +1,13 @@
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use cln_plugin::Plugin;
-use cln_rpc::RpcError;
 use serde_json::{json, Map};
 
-use crate::{fetch::resolve_invstring, hooks::Paycmd};
+use crate::{fetch::resolve_invstring, structs::Paycmd, PluginState};
 
 const PAYANYARGS: [&str; 3] = ["invstring", "amount_msat", "message"];
 
 pub async fn payany(
-    plugin: Plugin<()>,
+    plugin: Plugin<PluginState>,
     args: serde_json::Value,
 ) -> Result<serde_json::Value, Error> {
     let mut params = Map::new();
@@ -16,20 +15,15 @@ pub async fn payany(
         params = args_obj.clone();
     } else if let Some(args_arr) = args.as_array() {
         for (i, arg) in args_arr.iter().enumerate() {
-            params.insert(PAYANYARGS[i].to_string(), arg.clone());
+            params.insert(PAYANYARGS[i].to_owned(), arg.clone());
         }
     }
-    let actual_params = match resolve_invstring(plugin, &mut params, Paycmd::Xpay).await {
+    match resolve_invstring(plugin, &mut params, Paycmd::Xpay).await {
         Ok(o) => o,
         Err(e) => {
-            log::info!("Error fetching invoice: {}", e);
             params.remove("message");
-            return Ok(json!(RpcError {
-                code: None,
-                message: e.to_string(),
-                data: None,
-            }));
+            return Err(anyhow!(e.to_string()));
         }
     };
-    Ok(json!({"invoice":format!("{}", actual_params.get("invstring").unwrap().as_str().unwrap())}))
+    Ok(json!({"invoice":format!("{}", params.get("invstring").unwrap().as_str().unwrap())}))
 }
