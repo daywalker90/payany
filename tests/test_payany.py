@@ -399,6 +399,10 @@ def test_pay_to_xpay_fees(node_factory, get_plugin):  # noqa: F811
         wait_for_announce=True,
         opts=opts,
     )
+    version = l1.rpc.getinfo()["version"]
+    if version.startswith("v24.0") or version.startswith("v23."):
+        # old cln versions pay command is not finding routes this tight
+        return
 
     ch1 = l2.rpc.call("listpeerchannels", {"id": l3.info["id"]})["channels"][0][
         "short_channel_id"
