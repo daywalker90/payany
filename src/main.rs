@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use anyhow::anyhow;
 use cln_plugin::{
     options::{
@@ -6,6 +8,7 @@ use cln_plugin::{
     },
     Builder,
 };
+use cln_rpc::{model::requests::GetinfoRequest, ClnRpc};
 use hooks::hook_handler;
 use parse::{get_startup_options, parse_pay_args, setconfig_callback};
 use rpc::payany;
@@ -93,11 +96,33 @@ async fn main() -> Result<(), anyhow::Error> {
         None => return Err(anyhow!("Error configuring payany!")),
     };
     if let Ok(plugin) = confplugin.start(state).await {
-        parse_pay_args(plugin.clone()).await?;
+        {
+            let mut rpc = ClnRpc::new(
+                Path::new(&plugin.configuration().lightning_dir)
+                    .join(plugin.configuration().rpc_file),
+            )
+            .await?;
+            plugin.state().config.lock().version =
+                rpc.call_typed(&GetinfoRequest {}).await?.version;
+        }
+        match parse_pay_args(plugin.clone()).await {
+            Ok(_) => (),
+            Err(e) => {
+                println!(
+                    "{}",
+                    serde_json::json!({"jsonrpc": "2.0",
+                                    "method": "log",
+                                    "params": {"level":"warn",
+                                    "message":format!("Error parsing pay args: {}", e)}})
+                );
+                return Err(e);
+            }
+        };
         match check_handle_option(plugin.clone()).await {
             Ok(()) => (),
             Err(e) => log::info!("{}", e),
         };
+        log::debug!("ready");
         plugin.join().await
     } else {
         Err(anyhow!("Error starting payany!"))

@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 
 import pytest
 from pyln.client import RpcError
@@ -35,6 +36,7 @@ def test_payany_with_offer(node_factory, get_plugin):  # noqa: F811
                 "invstring": offer["bolt12"],
             },
         )
+    time.sleep(1)
     result = l1.rpc.call(
         "payany",
         {
@@ -43,6 +45,7 @@ def test_payany_with_offer(node_factory, get_plugin):  # noqa: F811
             "message": "test1",
         },
     )
+    time.sleep(1)
     decoded = l1.rpc.call("decode", {"string": result["invoice"]})
     assert decoded["invoice_amount_msat"] == 1_000
     assert decoded["invreq_payer_note"] == "test1"
@@ -56,6 +59,7 @@ def test_payany_with_offer(node_factory, get_plugin):  # noqa: F811
             "message": "test2",
         },
     )
+    time.sleep(1)
     decoded = l1.rpc.call("decode", {"string": result["invoice"]})
     assert decoded["invoice_amount_msat"] == 2_000
     assert decoded["invreq_payer_note"] == "test2"
@@ -148,6 +152,10 @@ def test_renepay_supercharged(node_factory, get_plugin):  # noqa: F811
         wait_for_announce=True,
         opts=opts,
     )
+    version = l1.rpc.getinfo()["version"]
+    if version.startswith("v24.") or version.startswith("v23."):
+        # these cln versions don't support bolt12 invoices with renepay
+        return
     offer = l2.rpc.call("offer", {"amount": "any", "description": "testpayany"})
     result = l1.rpc.call(
         "renepay",
@@ -187,6 +195,10 @@ def test_budget(node_factory, get_plugin):  # noqa: F811
         wait_for_announce=True,
         opts=opts,
     )
+    version = l1.rpc.getinfo()["version"]
+    if version.startswith("v24.0") or version.startswith("v23."):
+        # old cln versions pay command is not finding routes this tight
+        return
     l1.daemon.logsearch_start = 0
     l1.daemon.wait_for_log("Budget set to 1000000msat every 18000seconds")
 

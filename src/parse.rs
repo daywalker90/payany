@@ -14,6 +14,7 @@ use serde_json::{json, Map};
 
 use crate::{
     structs::{Config, TimeUnit},
+    util::at_or_above_version,
     PluginState, OPT_PAYANY_BUDGET_AMOUNT_MSAT, OPT_PAYANY_BUDGET_PER, OPT_PAYANY_DNS,
     OPT_PAYANY_HANDLE_PAY, OPT_PAYANY_STRICT_LNURL,
 };
@@ -44,38 +45,37 @@ pub fn get_startup_options(
     plugin: &ConfiguredPlugin<PluginState, tokio::io::Stdin, tokio::io::Stdout>,
     state: PluginState,
 ) -> Result<(), anyhow::Error> {
-    {
-        let mut config = state.config.lock();
+    let mut config = state.config.lock();
 
-        if let Some(bamt) = plugin.option_str(OPT_PAYANY_BUDGET_AMOUNT_MSAT)? {
-            check_option(&mut config, OPT_PAYANY_BUDGET_AMOUNT_MSAT, &bamt)?;
-        };
-        if let Some(bper) = plugin.option_str(OPT_PAYANY_BUDGET_PER)? {
-            check_option(&mut config, OPT_PAYANY_BUDGET_PER, &bper)?;
-        };
-        if let Some(handle) = plugin.option_str(OPT_PAYANY_HANDLE_PAY)? {
-            check_option(&mut config, OPT_PAYANY_HANDLE_PAY, &handle)?;
-        };
-        if let Some(bper) = plugin.option_str(OPT_PAYANY_DNS)? {
-            check_option(&mut config, OPT_PAYANY_DNS, &bper)?;
-        };
-        if let Some(handle) = plugin.option_str(OPT_PAYANY_STRICT_LNURL)? {
-            check_option(&mut config, OPT_PAYANY_STRICT_LNURL, &handle)?;
-        };
-        if config.budget_amount_msat.is_some() || config.budget_per.is_some() {
-            if config.budget_amount_msat.is_some() && config.budget_per.is_some() {
-                log::info!(
-                    "Budget set to {}msat every {}seconds",
-                    config.budget_amount_msat.unwrap().msat(),
-                    config.budget_per.unwrap()
-                );
-            } else {
-                return Err(anyhow!("Incomplete Budget options!"));
-            }
+    if let Some(bamt) = plugin.option_str(OPT_PAYANY_BUDGET_AMOUNT_MSAT)? {
+        check_option(&mut config, OPT_PAYANY_BUDGET_AMOUNT_MSAT, &bamt)?;
+    };
+    if let Some(bper) = plugin.option_str(OPT_PAYANY_BUDGET_PER)? {
+        check_option(&mut config, OPT_PAYANY_BUDGET_PER, &bper)?;
+    };
+    if let Some(handle) = plugin.option_str(OPT_PAYANY_HANDLE_PAY)? {
+        check_option(&mut config, OPT_PAYANY_HANDLE_PAY, &handle)?;
+    };
+    if let Some(bper) = plugin.option_str(OPT_PAYANY_DNS)? {
+        check_option(&mut config, OPT_PAYANY_DNS, &bper)?;
+    };
+    if let Some(handle) = plugin.option_str(OPT_PAYANY_STRICT_LNURL)? {
+        check_option(&mut config, OPT_PAYANY_STRICT_LNURL, &handle)?;
+    };
+    if config.budget_amount_msat.is_some() || config.budget_per.is_some() {
+        if config.budget_amount_msat.is_some() && config.budget_per.is_some() {
+            log::info!(
+                "Budget set to {}msat every {}seconds",
+                config.budget_amount_msat.unwrap().msat(),
+                config.budget_per.unwrap()
+            );
         } else {
-            log::info!("No Budget set!")
+            return Err(anyhow!("Incomplete Budget options!"));
         }
+    } else {
+        log::info!("No Budget set!")
     }
+
     Ok(())
 }
 
@@ -357,26 +357,37 @@ pub async fn parse_pay_args(plugin: Plugin<PluginState>) -> Result<(), anyhow::E
     )
     .await?;
 
+    let config = plugin.state().config.lock().clone();
+
     let help_pay = rpc
         .call_typed(&HelpRequest {
             command: Some("pay".to_owned()),
         })
         .await?
         .help;
-    let help_xpay = rpc
-        .call_typed(&HelpRequest {
+
+    let help_xpay = if at_or_above_version(&config.version, "24.11")? {
+        rpc.call_typed(&HelpRequest {
             command: Some("xpay".to_owned()),
         })
         .await?
-        .help;
-    let help_renepay = rpc
-        .call_typed(&HelpRequest {
+        .help
+    } else {
+        Vec::new()
+    };
+
+    let help_renepay = if at_or_above_version(&config.version, "23.08")? {
+        rpc.call_typed(&HelpRequest {
             command: Some("renepay".to_owned()),
         })
         .await?
-        .help;
+        .help
+    } else {
+        Vec::new()
+    };
 
     let mut config = plugin.state().config.lock();
+
     if let Some(hp) = help_pay.first() {
         for arg in hp.command.split(" ") {
             if arg.eq("pay") {

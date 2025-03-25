@@ -56,7 +56,7 @@ pub async fn fetch_invoice_bolt12(
             if offer_amt.msat() != amt.msat() {
                 return Err(anyhow!(
                     "offer: not matching stated amount_msat: {} != {}",
-                    offer_decoded.offer_amount_msat.unwrap().msat(),
+                    offer_amt.msat(),
                     amt.msat()
                 ));
             }

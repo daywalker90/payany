@@ -2,10 +2,7 @@ use std::path::Path;
 
 use anyhow::anyhow;
 use cln_plugin::Plugin;
-use cln_rpc::{
-    model::requests::{GetinfoRequest, SetconfigRequest},
-    ClnRpc,
-};
+use cln_rpc::{model::requests::SetconfigRequest, ClnRpc};
 use serde_json::json;
 
 use crate::PluginState;
@@ -33,8 +30,7 @@ pub async fn check_handle_option(plugin: Plugin<PluginState>) -> Result<(), anyh
         .unwrap();
 
     if value_bool {
-        let version = rpc.call_typed(&GetinfoRequest {}).await?.version;
-        if at_or_above_version(&version, "25.02")? {
+        if at_or_above_version(&plugin.state().config.lock().version, "25.02")? {
             rpc.call_typed(&SetconfigRequest {
                 transient: Some(true),
                 val: Some("false".to_owned()),

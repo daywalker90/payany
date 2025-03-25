@@ -32,6 +32,7 @@ pub struct Config {
     pub renepayargs: Vec<String>,
     pub dns_server: DnsServer,
     pub strict_lnurl: bool,
+    pub version: String,
 }
 
 #[derive(Clone, Copy, PartialEq)]
