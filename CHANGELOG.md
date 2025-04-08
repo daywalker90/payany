@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.1] 2025-04-08
+
+### Fixed
+- don't panic on wrong user inputs
+
 ## [0.2.0] 2025-03-25
 
 ### Added
