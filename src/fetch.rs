@@ -19,7 +19,11 @@ pub async fn resolve_invstring(
         Paycmd::Xpay | Paycmd::Renepay => "invstring",
     };
     let invstring_lower_presplit = if let Some(invstr) = params.get(invstring_name) {
-        invstr.as_str().unwrap().to_owned().to_lowercase()
+        invstr
+            .as_str()
+            .ok_or_else(|| anyhow!("`invstring` must be a string"))?
+            .to_owned()
+            .to_lowercase()
     } else {
         return Err(anyhow!("missing required parameter: {}", invstring_name));
     };
@@ -30,12 +34,22 @@ pub async fn resolve_invstring(
             break;
         }
     }
-    let amount_msat = params
-        .get("amount_msat")
-        .map(|amt| Amount::from_msat(amt.as_u64().unwrap()));
-    let message = params
-        .get("message")
-        .map(|msg| msg.as_str().unwrap().to_owned());
+    let amount_msat = if let Some(amt) = params.get("amount_msat") {
+        Some(Amount::from_msat(amt.as_u64().ok_or_else(|| {
+            anyhow!("`amount_msat` must be an integer")
+        })?))
+    } else {
+        None
+    };
+    let message = if let Some(msg) = params.get("message") {
+        match msg {
+            serde_json::Value::Number(number) => Some(number.to_string()),
+            serde_json::Value::String(s) => Some(s.to_owned()),
+            _ => return Err(anyhow!("`message` must be a string")),
+        }
+    } else {
+        None
+    };
 
     if invstring_lower.starts_with("lnurl") {
         log::debug!("lnurl detected");
