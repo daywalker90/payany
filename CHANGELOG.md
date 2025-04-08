@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2] 2025-04-08
+
+### Fixed
+- don't use ANY dns query type, some servers refuse those, use specific ones instead
+- support multiline TXT records
+
 ## [0.2.1] 2025-04-08
 
 ### Fixed

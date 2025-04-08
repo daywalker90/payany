@@ -150,36 +150,35 @@ pub async fn fetch_invoice_bip353(
     let mut query = format!("{}.user._bitcoin-payment.{}", user, domain);
 
     'outer: loop {
-        let lookup_response = resolver.lookup(query.clone(), RecordType::ANY).await?;
-        log::debug!("{:?}", lookup_response);
+        let txt_response = resolver.lookup(query.clone(), RecordType::TXT).await?;
+        let rrsig_response = resolver.lookup(query.clone(), RecordType::RRSIG).await?;
 
         let mut bip21_result = None;
 
-        if !is_safe_rrsig_algo(&lookup_response) {
+        if !is_safe_rrsig_algo(&rrsig_response) {
             return Err(anyhow!("DNSSEC signature is not secure!"));
         };
 
-        for proven_rdata in lookup_response.dnssec_iter() {
+        for proven_rdata in txt_response.dnssec_iter() {
             let (proof, rdata) = proven_rdata.into_parts();
             if !proof.is_secure() {
                 continue;
             }
 
             if let Some(txt_type) = rdata.as_txt() {
-                for txt_bytes in txt_type.iter() {
-                    let txt = if let Ok(txt_str) = String::from_utf8(txt_bytes.clone().into_vec()) {
-                        txt_str
-                    } else {
-                        continue;
-                    };
-                    if !txt.starts_with("bitcoin:") {
-                        continue;
-                    }
-                    if let Some(_bip21) = bip21_result {
-                        return Err(anyhow!("multiple bip21 entries found in txt records!"));
-                    }
-                    bip21_result = Some(txt.split_once(":").unwrap().1.to_owned())
+                let txt = txt_type
+                    .iter()
+                    .map(|b| String::from_utf8_lossy(b))
+                    .collect::<Vec<_>>()
+                    .join("");
+
+                if !txt.starts_with("bitcoin:") {
+                    continue;
                 }
+                if let Some(_bip21) = bip21_result {
+                    return Err(anyhow!("multiple bip21 entries found in txt records!"));
+                }
+                bip21_result = Some(txt.split_once(":").unwrap().1.to_owned())
             }
         }
 
@@ -202,7 +201,9 @@ pub async fn fetch_invoice_bip353(
             return Err(anyhow!("no offer found in txt dns entry"));
         }
 
-        for proven_rdata in lookup_response.dnssec_iter() {
+        let cname_response = resolver.lookup(query.clone(), RecordType::CNAME).await?;
+
+        for proven_rdata in cname_response.dnssec_iter() {
             let (proof, rdata) = proven_rdata.into_parts();
             if !proof.is_secure() {
                 continue;
@@ -226,10 +227,14 @@ fn is_safe_rrsig_algo(lookup_response: &Lookup) -> bool {
         if let Some(dnssec_type) = record.as_dnssec() {
             if let Some(rrsig_type) = dnssec_type.as_rrsig() {
                 log::debug!(
-                    "rrsig algo:{} len:{}",
+                    "rrsig type_covered:{} algo:{} len:{}",
+                    rrsig_type.type_covered(),
                     rrsig_type.algorithm(),
                     rrsig_type.sig().len()
                 );
+                if rrsig_type.type_covered() != RecordType::TXT {
+                    continue;
+                }
                 match rrsig_type.algorithm() {
                     dnssec::Algorithm::RSASHA256 => return rrsig_type.sig().len() >= 128,
                     dnssec::Algorithm::RSASHA512 => return rrsig_type.sig().len() >= 128,
