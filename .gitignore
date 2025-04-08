@@ -1,5 +1,6 @@
 /target/
 /tests/__pycache__/
+/tests/clnaddress
 /venv/
 /result/
 rust-toolchain.toml
