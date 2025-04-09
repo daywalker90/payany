@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.4] 2025-04-10
+### Changed
+- removed extra RRSIG query for BIP-353 since some DNS servers don't respond to them, instead rely on hickory's proof status alone
+
 ## [0.2.3] 2025-04-09
 ### Changed
 - use DNS over HTTPS with included root certificates, so you won't get censored by your router or ISP
