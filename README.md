@@ -93,6 +93,9 @@ Example if you want your node to only be able to spend 100.000 sats per week: ``
 - [BIP353](https://github.com/bitcoin/bips/blob/master/bip-0353.mediawiki) lightning addresses (DNAME DNS entries and non-ASCII identifiers not supported for now)
 - LNURL lightning addresses and strings: [LUD-06](https://github.com/lnurl/luds/blob/luds/06.md), [LUD-12](https://github.com/lnurl/luds/blob/luds/12.md), [LUD-16](https://github.com/lnurl/luds/blob/luds/16.md)
 
+## BIP-353 and DNSSEC
+In order to use ``BIP-353`` DNSSEC support is required. Some configurations might not work out of the box. With default settings the google DNS is used but there still might be a router in between that is filtering unencrypted DNS queries. In that case look into using `unbound` and set `payany-dns` to `system` You can debug this using `dig`:
+- check `dig <user>.user._bitcoin-payment.<domain> TXT +dnssec` where you replace `<user>` and `<domain>` with the values from your ``BIP-353`` e.g. for anon@domain.com its `anon.user._bitcoin-payment.domain.com`. The returned data has a line called `flags` and if DNSSEC is working it will have `ad` as a flag and in the `ANSWER SECTION` it will have a RRSIG type entry besides the TXT entry.
 
 ## Methods
 You can use this command to only fetch the invoice and not pay it directly:
