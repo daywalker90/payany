@@ -527,6 +527,7 @@ dependencies = [
  "async-recursion",
  "async-trait",
  "bitflags",
+ "bytes",
  "cfg-if",
  "critical-section",
  "data-encoding",
@@ -534,18 +535,23 @@ dependencies = [
  "futures-channel",
  "futures-io",
  "futures-util",
+ "h2",
+ "http",
  "idna",
  "ipnet",
  "once_cell",
  "rand",
  "ring",
+ "rustls",
  "rustls-pki-types",
  "thiserror 2.0.12",
  "time",
  "tinyvec",
  "tokio",
+ "tokio-rustls",
  "tracing",
  "url",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -563,10 +569,13 @@ dependencies = [
  "parking_lot",
  "rand",
  "resolv-conf",
+ "rustls",
  "smallvec",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-rustls",
  "tracing",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -1388,6 +1397,7 @@ version = "0.23.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "822ee9188ac4ec04a2f0531e55d035fb2de73f18b41a63c70c2712503b6fb13c"
 dependencies = [
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",

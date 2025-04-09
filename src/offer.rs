@@ -124,11 +124,15 @@ pub async fn fetch_invoice_bip353(
 ) -> Result<(), Error> {
     let config = plugin.state().config.lock().clone();
     let (resolver_config, mut resolver_opts) = match config.dns_server {
-        crate::structs::DnsServer::Google => (ResolverConfig::google(), ResolverOpts::default()),
-        crate::structs::DnsServer::Cloudflare => {
-            (ResolverConfig::cloudflare(), ResolverOpts::default())
+        crate::structs::DnsServer::Google => {
+            (ResolverConfig::google_https(), ResolverOpts::default())
         }
-        crate::structs::DnsServer::Quad9 => (ResolverConfig::quad9(), ResolverOpts::default()),
+        crate::structs::DnsServer::Cloudflare => {
+            (ResolverConfig::cloudflare_https(), ResolverOpts::default())
+        }
+        crate::structs::DnsServer::Quad9 => {
+            (ResolverConfig::quad9_https(), ResolverOpts::default())
+        }
         crate::structs::DnsServer::System => read_system_conf()?,
     };
     resolver_opts.validate = true;

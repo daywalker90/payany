@@ -17,7 +17,7 @@ cln-plugin = "0.4"
 # cln-plugin = { path="../../lightning/plugins/", version = "^0.3" }
 
 reqwest = { version = "0.12", default-features = false, features = ["http2", "json","rustls-tls"] }
-hickory-resolver = {version = "0.25.1", features =["dnssec-ring"]}
+hickory-resolver = {version = "0.25.1", features =["dnssec-ring", "https-ring", "webpki-roots"]}
 
 bech32 = "0.11"
 
