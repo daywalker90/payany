@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.3] 2025-04-09
+### Changed
+- use DNS over HTTPS with included root certificates, so you won't get censored by your router or ISP
+
 ## [0.2.2] 2025-04-08
 
 ### Fixed
