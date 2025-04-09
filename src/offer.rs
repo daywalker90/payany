@@ -9,9 +9,8 @@ use cln_rpc::{
 };
 use hickory_resolver::{
     config::{ResolverConfig, ResolverOpts},
-    lookup::Lookup,
     name_server::TokioConnectionProvider,
-    proto::{dnssec, rr::RecordType},
+    proto::rr::RecordType,
     system_conf::read_system_conf,
     TokioResolver,
 };
@@ -155,13 +154,9 @@ pub async fn fetch_invoice_bip353(
 
     'outer: loop {
         let txt_response = resolver.lookup(query.clone(), RecordType::TXT).await?;
-        let rrsig_response = resolver.lookup(query.clone(), RecordType::RRSIG).await?;
+        log::debug!("{:?}", txt_response);
 
         let mut bip21_result = None;
-
-        if !is_safe_rrsig_algo(&rrsig_response) {
-            return Err(anyhow!("DNSSEC signature is not secure!"));
-        };
 
         for proven_rdata in txt_response.dnssec_iter() {
             let (proof, rdata) = proven_rdata.into_parts();
@@ -224,31 +219,4 @@ pub async fn fetch_invoice_bip353(
     Err(anyhow!(
         "bip353 offer not found or DNSSEC signatures not secure"
     ))
-}
-
-fn is_safe_rrsig_algo(lookup_response: &Lookup) -> bool {
-    for record in lookup_response.iter() {
-        if let Some(dnssec_type) = record.as_dnssec() {
-            if let Some(rrsig_type) = dnssec_type.as_rrsig() {
-                log::debug!(
-                    "rrsig type_covered:{} algo:{} len:{}",
-                    rrsig_type.type_covered(),
-                    rrsig_type.algorithm(),
-                    rrsig_type.sig().len()
-                );
-                if rrsig_type.type_covered() != RecordType::TXT {
-                    continue;
-                }
-                match rrsig_type.algorithm() {
-                    dnssec::Algorithm::RSASHA256 => return rrsig_type.sig().len() >= 128,
-                    dnssec::Algorithm::RSASHA512 => return rrsig_type.sig().len() >= 128,
-                    dnssec::Algorithm::ECDSAP256SHA256 => return true,
-                    dnssec::Algorithm::ECDSAP384SHA384 => return true,
-                    dnssec::Algorithm::ED25519 => return true,
-                    _ => return false,
-                };
-            };
-        };
-    }
-    false
 }
