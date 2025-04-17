@@ -331,12 +331,25 @@ pub fn get_maxfee(
             .ok_or_else(|| anyhow!("maxfee: should be a millisatoshi amount"))
     } else {
         let maxfee_absolut = if let Some(maxfeep) = maxfeepercent_param {
-            let maxfeep_f64 = maxfeep.as_f64().ok_or_else(|| {
-                anyhow!(
-                    "maxfeepercent: should be a non-negative floating-point number: {}",
-                    maxfeep
-                )
-            })?;
+            let mfp = match maxfeep {
+                serde_json::Value::Number(number) => number.as_f64().ok_or_else(|| {
+                    anyhow!(
+                        "maxfeepercent: should be a floating-point number: {}",
+                        number
+                    )
+                }),
+                serde_json::Value::String(s) => s.parse::<f64>().map_err(|_e| {
+                    anyhow!(
+                        "maxfeepercent: cound not parse string as a floating-point number: {}",
+                        s
+                    )
+                }),
+                _ => Err(anyhow!("maxfeepercent is not a number or string!")),
+            };
+            let maxfeep_f64 = mfp?;
+            if maxfeep_f64 < 0.0 {
+                return Err(anyhow!("maxfeepercent must be positive!"));
+            }
             ((maxfeep_f64 / 100.0) * (invoice_amount_msat as f64)).ceil() as u64
         } else {
             (0.01 * (invoice_amount_msat as f64)).ceil() as u64

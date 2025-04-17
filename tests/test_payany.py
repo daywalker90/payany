@@ -432,6 +432,28 @@ def test_pay_to_xpay_fees(node_factory, get_plugin):  # noqa: F811
     invoice = l3.rpc.call("invoice", [950000, "test3", "test3"])
     l1.rpc.call("pay", {"bolt11": invoice["bolt11"], "exemptfee": 10010})
 
+    invoice = l3.rpc.call("invoice", [950000, "test4", "test4"])
+    l1.rpc.call("pay", {"bolt11": invoice["bolt11"], "maxfeepercent": "1.1"})
+
+    invoice = l3.rpc.call("invoice", [950000, "test5", "test5"])
+    with pytest.raises(
+        RpcError,
+        match="maxfeepercent: cound not parse string as a floating-point number: 5%",
+    ):
+        l1.rpc.call("pay", {"bolt11": invoice["bolt11"], "maxfeepercent": "5%"})
+
+    with pytest.raises(
+        RpcError,
+        match="maxfeepercent is not a number or string!",
+    ):
+        l1.rpc.call("pay", {"bolt11": invoice["bolt11"], "maxfeepercent": [1.1]})
+
+    with pytest.raises(
+        RpcError,
+        match="maxfeepercent must be positive!",
+    ):
+        l1.rpc.call("pay", {"bolt11": invoice["bolt11"], "maxfeepercent": -1.0})
+
 
 def test_lnurl(node_factory, get_plugin):  # noqa: F811
     port = node_factory.get_unused_port()
