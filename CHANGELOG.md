@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.5] 2025-04-17
+### Fixed
+- ``payany-xpay-handle-pay``: wallets sending ``maxfeepercent`` as a string now work as expected
+
 ## [0.2.4] 2025-04-10
 ### Changed
 - removed extra RRSIG query for BIP-353 since some DNS servers don't respond to them, instead rely on hickory's proof status alone
