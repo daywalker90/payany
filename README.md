@@ -72,7 +72,7 @@ When using the **message** argument it's usually easier to use the key=value for
 
 The budget options will prevent payment commands shipped with CLN (**pay**/**xpay**/**renepay**) to not exceed a certain budget in a certain time window. Only **pay**/**xpay**/**renepay** are being checked against the budget you can set. ``withdraw`` or ``fundchannel`` with ``push_msat`` shenanigans are **NOT** checked. These options are intendend to be used in combination with a rune similar to this:
 
-``lightning-cli createrune -k restrictions='[["method^list", "method^get", "method=summary", "method=sql", "method=decode", "method=fetchinvoice", "method=pay", "method=xpay", "method=renepay"],["method/listdatastore"]]'`` 
+``lightning-cli createrune -k restrictions='[["method^list", "method^get", "method=newaddr", "method=invoice", "method=sql", "method=decode", "method=fetchinvoice", "method=pay", "method=xpay", "method=renepay"],["method/listdatastore"]]'`` 
 
 You must also **NOT** allow ``setconfig`` since you can dynamically adjust the budget options during runtime. I would also use ``important-plugin=/path/to/payany`` to load it. 
 
