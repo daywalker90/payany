@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0] Unreleased
+### Removed
+- :warning: ``payany-dns``: option removed (you have to remove it from your config if you have set it!) in favor of trying them all one by one and using tor if cln is configured to `always-use-proxy`
+
+### Changed
+- All lookups are proxied through tor if CLN is configured with a `proxy` and `always-use-proxy` is set to `true`
+- If one DNS fails the next one is tried isntead of immediately giving up
+
+### Added
+- Explicit timeout of 30s for all lookups
+
 ## [0.2.5] 2025-04-17
 ### Fixed
 - ``payany-xpay-handle-pay``: wallets sending ``maxfeepercent`` as a string now work as expected

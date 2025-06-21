@@ -1,6 +1,6 @@
 [package]
 name = "payany"
-version = "0.2.5"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.75"
 
@@ -16,8 +16,10 @@ cln-rpc = "0.4"
 cln-plugin = "0.4"
 # cln-plugin = { path="../../lightning/plugins/", version = "^0.3" }
 
-reqwest = { version = "0.12", default-features = false, features = ["http2", "json","rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["http2", "json","rustls-tls", "socks"] }
 hickory-resolver = {version = "0.25.1", features =["dnssec-ring", "https-ring", "webpki-roots"]}
+
+tokio-socks = "0.5"
 
 bech32 = "0.11"
 

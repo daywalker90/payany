@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use anyhow::{anyhow, Context, Error};
 use cln_plugin::Plugin;
@@ -20,7 +20,19 @@ pub async fn fetch_invoice_lnurl(
     message: Option<String>,
     params: &mut Map<String, serde_json::Value>,
 ) -> Result<(), Error> {
-    let client = reqwest::Client::new();
+    let config = plugin.state().config.lock().clone();
+
+    let client = if let Some(tp) = config.tor_proxy {
+        let proxy = reqwest::Proxy::all(format!("socks5h://{}", tp))?;
+        reqwest::Client::builder()
+            .proxy(proxy)
+            .timeout(Duration::from_secs(30))
+            .build()?
+    } else {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()?
+    };
     let lnurlp_config_raw = client.get(config_url).send().await?;
     if !lnurlp_config_raw.status().is_success() {
         return Err(anyhow!(
@@ -33,8 +45,6 @@ pub async fn fetch_invoice_lnurl(
         .json::<LnurlpConfig>()
         .await
         .context("Not a valid LNURL config response")?;
-
-    let config = plugin.state().config.lock().clone();
 
     validate_lnurl_config(&lnurlp_config, amount_msat, lnaddress, config.strict_lnurl)?;
 

@@ -30,9 +30,9 @@ pub struct Config {
     pub payargs: Vec<String>,
     pub xpayargs: Vec<String>,
     pub renepayargs: Vec<String>,
-    pub dns_server: DnsServer,
     pub strict_lnurl: bool,
     pub version: String,
+    pub tor_proxy: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -151,28 +151,6 @@ impl FromStr for TimeUnit {
             "day" | "days" | "d" => Ok(TimeUnit::Day),
             "week" | "weeks" | "w" => Ok(TimeUnit::Week),
             _ => Err(format!("Unsupported time unit: {}", s)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub enum DnsServer {
-    #[default]
-    Google,
-    Cloudflare,
-    Quad9,
-    System,
-}
-impl FromStr for DnsServer {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "google" => Ok(DnsServer::Google),
-            "cloudflare" => Ok(DnsServer::Cloudflare),
-            "quad9" => Ok(DnsServer::Quad9),
-            "system" => Ok(DnsServer::System),
-            _ => Err(format!("Unsupported DNS server: {}", s)),
         }
     }
 }

@@ -15,8 +15,8 @@ use serde_json::{json, Map};
 use crate::{
     structs::{Config, TimeUnit},
     util::at_or_above_version,
-    PluginState, OPT_PAYANY_BUDGET_AMOUNT_MSAT, OPT_PAYANY_BUDGET_PER, OPT_PAYANY_DNS,
-    OPT_PAYANY_HANDLE_PAY, OPT_PAYANY_STRICT_LNURL,
+    PluginState, OPT_PAYANY_BUDGET_AMOUNT_MSAT, OPT_PAYANY_BUDGET_PER, OPT_PAYANY_HANDLE_PAY,
+    OPT_PAYANY_STRICT_LNURL,
 };
 
 fn parse_time_period(input: &str) -> Result<u64, anyhow::Error> {
@@ -55,9 +55,6 @@ pub fn get_startup_options(
     };
     if let Some(handle) = plugin.option_str(OPT_PAYANY_HANDLE_PAY)? {
         check_option(&mut config, OPT_PAYANY_HANDLE_PAY, &handle)?;
-    };
-    if let Some(bper) = plugin.option_str(OPT_PAYANY_DNS)? {
-        check_option(&mut config, OPT_PAYANY_DNS, &bper)?;
     };
     if let Some(handle) = plugin.option_str(OPT_PAYANY_STRICT_LNURL)? {
         check_option(&mut config, OPT_PAYANY_STRICT_LNURL, &handle)?;
@@ -175,13 +172,6 @@ fn check_option(
             } else {
                 config.xpay_handle_pay = value.as_bool().unwrap()
             }
-        }
-        n if n.eq(OPT_PAYANY_DNS) => {
-            config.dns_server = value
-                .as_str()
-                .unwrap()
-                .parse()
-                .map_err(|e| anyhow!("Could not parse DNS server: {}", e))?
         }
         n if n.eq(OPT_PAYANY_STRICT_LNURL) => config.strict_lnurl = value.as_bool().unwrap(),
         _ => return Err(anyhow!("Unknown option: {}", name)),

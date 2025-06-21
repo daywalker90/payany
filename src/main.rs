@@ -2,16 +2,14 @@ use std::path::Path;
 
 use anyhow::anyhow;
 use cln_plugin::{
-    options::{
-        DefaultBooleanConfigOption, DefaultStringConfigOption, IntegerConfigOption,
-        StringConfigOption,
-    },
+    options::{DefaultBooleanConfigOption, IntegerConfigOption, StringConfigOption},
     Builder,
 };
 use cln_rpc::{model::requests::GetinfoRequest, ClnRpc};
 use hooks::hook_handler;
 use parse::{get_startup_options, parse_pay_args, setconfig_callback};
 use rpc::payany;
+use serde_json::json;
 use structs::PluginState;
 use util::check_handle_option;
 
@@ -28,12 +26,11 @@ mod util;
 const OPT_PAYANY_BUDGET_PER: &str = "payany-budget-per";
 const OPT_PAYANY_BUDGET_AMOUNT_MSAT: &str = "payany-budget-amount-msat";
 const OPT_PAYANY_HANDLE_PAY: &str = "payany-xpay-handle-pay";
-const OPT_PAYANY_DNS: &str = "payany-dns";
 const OPT_PAYANY_STRICT_LNURL: &str = "payany-strict-lnurl";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), anyhow::Error> {
-    std::env::set_var("CLN_PLUGIN_LOG", "payany=debug,info");
+    std::env::set_var("CLN_PLUGIN_LOG", "payany=trace,info");
     log_panics::init();
 
     let state = PluginState::default();
@@ -54,12 +51,6 @@ async fn main() -> Result<(), anyhow::Error> {
         "payany handles conversion of pay to xpay",
     )
     .dynamic();
-    let opt_payany_dns = DefaultStringConfigOption::new_str_with_default(
-        OPT_PAYANY_DNS,
-        "google",
-        "DNS server to be used for bip353 lookups",
-    )
-    .dynamic();
     let opt_payany_strict_lnurl = DefaultBooleanConfigOption::new_bool_with_default(
         OPT_PAYANY_STRICT_LNURL,
         false,
@@ -71,7 +62,6 @@ async fn main() -> Result<(), anyhow::Error> {
         .option(opt_payany_budget_per)
         .option(opt_payany_budget_amount_msat)
         .option(opt_payany_handle_pay)
-        .option(opt_payany_dns)
         .option(opt_payany_strict_lnurl)
         .rpcmethod(
             "payany",
@@ -102,8 +92,47 @@ async fn main() -> Result<(), anyhow::Error> {
                     .join(plugin.configuration().rpc_file),
             )
             .await?;
-            plugin.state().config.lock().version =
-                rpc.call_typed(&GetinfoRequest {}).await?.version;
+
+            let cln_version = rpc.call_typed(&GetinfoRequest {}).await?.version;
+
+            let configs_val_response: serde_json::Value =
+                rpc.call_raw("listconfigs", &json!({})).await?;
+
+            let mut config = plugin.state().config.lock();
+            config.version = cln_version;
+
+            let configs_val = configs_val_response.get("configs").ok_or_else(|| {
+                anyhow!(
+                    "No configs found in listconfigs response: {:?}",
+                    configs_val_response
+                )
+            })?;
+
+            config.tor_proxy = if let Some(pc) = configs_val.get("proxy") {
+                if let Some(ap) = configs_val.get("always-use-proxy") {
+                    if ap
+                        .get("value_bool")
+                        .ok_or_else(|| anyhow!("always-use-proxy missing value_bool"))?
+                        .as_bool()
+                        .ok_or_else(|| anyhow!("always-use-proxy is not a boolean!"))?
+                    {
+                        let proxy = pc
+                            .get("value_str")
+                            .ok_or_else(|| anyhow!("proxy missing value_str"))?
+                            .as_str()
+                            .ok_or_else(|| anyhow!("proxy is not a string!"))?
+                            .to_owned();
+                        log::info!("Using tor proxy: {}", proxy);
+                        Some(proxy)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
         }
         match parse_pay_args(plugin.clone()).await {
             Ok(_) => (),
