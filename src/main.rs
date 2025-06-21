@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::anyhow;
 use cln_plugin::{
     options::{DefaultBooleanConfigOption, IntegerConfigOption, StringConfigOption},
-    Builder,
+    Builder, RpcMethodBuilder,
 };
 use cln_rpc::{model::requests::GetinfoRequest, ClnRpc};
 use hooks::hook_handler;
@@ -63,10 +63,10 @@ async fn main() -> Result<(), anyhow::Error> {
         .option(opt_payany_budget_amount_msat)
         .option(opt_payany_handle_pay)
         .option(opt_payany_strict_lnurl)
-        .rpcmethod(
-            "payany",
-            "fetch invoice for static ln payment method",
-            payany,
+        .rpcmethod_from_builder(
+            RpcMethodBuilder::new("payany", payany)
+                .description("fetch invoice for static ln payment method")
+                .usage("invstring amount_msat [message]"),
         )
         .hook("rpc_command", hook_handler)
         .setconfig_callback(setconfig_callback)
