@@ -93,7 +93,7 @@ Note: Release binaries are built using ``cross`` and the ``optimized`` profile.
 
 # Documentation
 
-Using **payany** may cause clearnet connections to fetch the invoices. DNS lookups for bip353 addresses use Google's DNS by default.
+**payany** will use clearnet connections to fetch the invoices unless you have set `proxy` and `always-use-proxy=true` in CLN, then it will use that proxy. DNS lookups for bip353 addresses use Google's DNS and if that fails it tries cloudlfare's and then quad9's DNS.
 
 When using **pay**/**xpay**/**renepay** combined with **payany** and lightning payment methods that don't have a specific **amount_msat** set you are required to set the **amount_msat** argument in **pay**/**xpay**/**renepay**. This is for fetching/checking the invoice against your intended **amount_msat** to pay. **payany** also adds a new argument to **pay**/**xpay**/**renepay** called **message** (at the last position). It is an optional message you intend to send to the payee. This is either put in the **comment** field for LNURL based methods or in the **payer_note** for bolt12 based methods.
 
