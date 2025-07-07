@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.3.0] Unreleased
+## [0.3.0] 2025-07-07
 ### Removed
 - :warning: ``payany-dns``: option removed (you have to remove it from your config if you have set it!) in favor of trying them all one by one and using tor if cln is configured to `always-use-proxy`
 
