@@ -23,7 +23,7 @@ pub async fn fetch_invoice_lnurl(
     let config = plugin.state().config.lock().clone();
 
     let client = if let Some(tp) = config.tor_proxy {
-        let proxy = reqwest::Proxy::all(format!("socks5h://{}", tp))?;
+        let proxy = reqwest::Proxy::all(format!("socks5h://{tp}"))?;
         reqwest::Client::builder()
             .proxy(proxy)
             .timeout(Duration::from_secs(30))
@@ -40,7 +40,7 @@ pub async fn fetch_invoice_lnurl(
             lnurlp_config_raw.status()
         ));
     }
-    log::debug!("lnurl config: {:?}", lnurlp_config_raw);
+    log::debug!("lnurl config: {lnurlp_config_raw:?}");
     let lnurlp_config = lnurlp_config_raw
         .json::<LnurlpConfig>()
         .await
@@ -54,7 +54,7 @@ pub async fn fetch_invoice_lnurl(
             .comment_allowed
             .ok_or_else(|| anyhow!("LNURL: message not supported for this address!"))?;
         if comment_length >= (msg.len() as u64) {
-            callback_url += &format!("&comment={}", msg);
+            callback_url += &format!("&comment={msg}");
         } else {
             return Err(anyhow!(
                 "LNURL: message too long for this address! {}>{}",
@@ -219,7 +219,7 @@ pub async fn resolve_lnurl(
 ) -> Result<(), Error> {
     let (hrp, config_url_bytes) = bech32::decode(&invstring)?;
     let config_url = String::from_utf8(config_url_bytes)?;
-    log::debug!("lnurl hrp:{} url:{}", hrp, config_url);
+    log::debug!("lnurl hrp:{hrp} url:{config_url}");
 
     fetch_invoice_lnurl(
         plugin,

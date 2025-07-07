@@ -77,7 +77,7 @@ async fn main() -> Result<(), anyhow::Error> {
         Some(plugin) => {
             match get_startup_options(&plugin, state.clone()) {
                 Ok(()) => &(),
-                Err(e) => return plugin.disable(format!("{}", e).as_str()).await,
+                Err(e) => return plugin.disable(format!("{e}").as_str()).await,
             };
             log::debug!("read startup options done");
 
@@ -122,7 +122,7 @@ async fn main() -> Result<(), anyhow::Error> {
                             .as_str()
                             .ok_or_else(|| anyhow!("proxy is not a string!"))?
                             .to_owned();
-                        log::info!("Using tor proxy: {}", proxy);
+                        log::info!("Using tor proxy: {proxy}");
                         Some(proxy)
                     } else {
                         None
@@ -149,7 +149,7 @@ async fn main() -> Result<(), anyhow::Error> {
         };
         match check_handle_option(plugin.clone()).await {
             Ok(()) => (),
-            Err(e) => log::info!("{}", e),
+            Err(e) => log::info!("{e}"),
         };
         log::debug!("ready");
         plugin.join().await

@@ -17,7 +17,7 @@ pub async fn hook_handler(
     let root: RpcCommand = match serde_json::from_value(args.clone()) {
         Ok(o) => o,
         Err(e) => {
-            log::debug!("Could not deserialize rpc_command: {}", e);
+            log::debug!("Could not deserialize rpc_command: {e}");
             return Ok(json!({"result":"continue"}));
         }
     };
@@ -52,7 +52,7 @@ pub async fn hook_handler(
             })}}))
         }
     };
-    log::debug!("params_obj: {:?}", params_as_object);
+    log::debug!("params_obj: {params_as_object:?}");
 
     match resolve_invstring(plugin.clone(), &mut params_as_object, paycmd).await {
         Ok(o) => o,
@@ -60,7 +60,7 @@ pub async fn hook_handler(
             params_as_object.remove("message");
             return Ok(json!({"return": {"error":json!(RpcError {
                 code: Some(-32602),
-                message: format!("payany could not fetch invoice: {}", e),
+                message: format!("payany could not fetch invoice: {e}"),
                 data: None,
             })}}));
         }
@@ -70,7 +70,7 @@ pub async fn hook_handler(
     if let Err(e) = budget_check(plugin.clone(), &params_as_object, paycmd).await {
         return Ok(json!({"return": {"error":json!(RpcError {
             code: Some(-32602),
-            message: format!("payany budget exceeded: {}", e),
+            message: format!("payany budget exceeded: {e}"),
             data: None,
         })}}));
     }
@@ -79,7 +79,7 @@ pub async fn hook_handler(
         if let Err(e) = convert_pay_to_xpay(plugin.clone(), &mut params_as_object).await {
             return Ok(json!({"return": {"error":json!(RpcError {
                 code: Some(-32602),
-                message: format!("payany conversion to xpay failed: {}", e),
+                message: format!("payany conversion to xpay failed: {e}"),
                 data: None,
             })}}));
         }
@@ -94,7 +94,7 @@ pub async fn hook_handler(
         Paycmd::Renepay=> "renepay"
     }),
     "params":params_as_object}});
-    log::debug!("{}", result);
+    log::debug!("{result}");
     Ok(result)
 }
 

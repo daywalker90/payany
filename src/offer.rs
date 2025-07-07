@@ -174,7 +174,7 @@ pub async fn fetch_invoice_bip353(
         resolvers.push(resolver.build());
     }
 
-    let mut query = format!("{}.user._bitcoin-payment.{}", user, domain);
+    let mut query = format!("{user}.user._bitcoin-payment.{domain}");
 
     for resolver in resolvers {
         log::debug!(
@@ -188,7 +188,7 @@ pub async fn fetch_invoice_bip353(
         );
         'outer: loop {
             let txt_response = resolver.lookup(query.clone(), RecordType::TXT).await?;
-            log::debug!("{:?}", txt_response);
+            log::debug!("{txt_response:?}");
 
             let mut bip21_result = None;
 
@@ -219,7 +219,7 @@ pub async fn fetch_invoice_bip353(
                 for bip21_param in bip21.split("?") {
                     if bip21_param.starts_with("lno=") {
                         let offer = bip21_param.strip_prefix("lno=").unwrap().to_owned();
-                        log::debug!("bip353 offer: {}", offer);
+                        log::debug!("bip353 offer: {offer}");
                         return fetch_invoice_bolt12(
                             plugin,
                             invstring_name,
@@ -243,7 +243,7 @@ pub async fn fetch_invoice_bip353(
                 }
                 if let Some(cname_type) = rdata.as_cname() {
                     query = cname_type.to_string();
-                    log::debug!("CNAME found, redirecting to: {}", query);
+                    log::debug!("CNAME found, redirecting to: {query}");
                     continue 'outer;
                 }
             }
