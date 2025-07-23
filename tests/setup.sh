@@ -69,24 +69,18 @@ else
 fi
 
 # Need clnaddress for some tests
-CLNADDRESS_LATEST_RELEASE=$(curl -s "https://api.github.com/repos/daywalker90/clnaddress/releases/latest")
-CLNADDRESS_FILE_URL=$(echo "$CLNADDRESS_LATEST_RELEASE" | jq -r ".assets[] | select(.name | endswith(\"$platform_file_end\")) | .browser_download_url")
+CLNADDRESS_VERSION="0.1.2"
+CLNADDRESS_ARCHIVE="clnaddress-v$CLNADDRESS_VERSION-$platform_file_end"
+CLNADDRESS_FILE_URL="https://github.com/daywalker90/clnaddress/releases/download/v$CLNADDRESS_VERSION/$CLNADDRESS_ARCHIVE"
 
-if [ -z "$CLNADDRESS_FILE_URL" ]; then
-  echo "No clnaddress file found matching key: $platform_file_end"
-  exit 1
-fi
-
-clnaddress_archive=clnaddress-$platform_file_end
-
-if ! curl -L "$CLNADDRESS_FILE_URL" -o "$script_dir/$clnaddress_archive"; then
+if ! curl -L "$CLNADDRESS_FILE_URL" -o "$script_dir/$CLNADDRESS_ARCHIVE"; then
     echo "Error downloading the file from $CLNADDRESS_FILE_URL" >&2
     exit 1
 fi
 
 
-if ! tar -xzvf "$script_dir/$clnaddress_archive" -C "$script_dir"; then
-    echo "Error extracting the contents of $clnaddress_archive" >&2
+if ! tar -xzvf "$script_dir/$CLNADDRESS_ARCHIVE" -C "$script_dir"; then
+    echo "Error extracting the contents of $CLNADDRESS_ARCHIVE" >&2
     exit 1
 fi
 
