@@ -1,18 +1,6 @@
 <table border="0">
   <tr>
     <td>
-      <a href="https://github.com/daywalker90/payany/actions/workflows/latest_v24.08.yml">
-        <img src="https://github.com/daywalker90/payany/actions/workflows/latest_v24.08.yml/badge.svg?branch=main">
-      </a>
-    </td>
-    <td>
-      <a href="https://github.com/daywalker90/payany/actions/workflows/main_v24.08.yml">
-        <img src="https://github.com/daywalker90/payany/actions/workflows/main_v24.08.yml/badge.svg?branch=main">
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td>
       <a href="https://github.com/daywalker90/payany/actions/workflows/latest_v24.11.yml">
         <img src="https://github.com/daywalker90/payany/actions/workflows/latest_v24.11.yml/badge.svg?branch=main">
       </a>
@@ -47,9 +35,20 @@
       </a>
     </td>
   </tr>
+  <tr>
+    <td>
+      <a href="https://github.com/daywalker90/payany/actions/workflows/latest_v25.09.yml">
+        <img src="https://github.com/daywalker90/payany/actions/workflows/latest_v25.09.yml/badge.svg?branch=main">
+      </a>
+    </td>
+    <td>
+      <a href="https://github.com/daywalker90/payany/actions/workflows/main_v25.09.yml">
+        <img src="https://github.com/daywalker90/payany/actions/workflows/main_v25.09.yml/badge.svg?branch=main">
+      </a>
+    </td>
+  </tr>
 </table>
 
-Failures in CLN 24.08.2 are a memleak error from CLN on shutdown.
 
 # payany
 A [CLN](https://github.com/ElementsProject/lightning) plugin to supercharge CLN's **pay**/**xpay**/**renepay**. It can automatically fetch invoices for all the static lightning payment addresses out there.You can also set a budget for how much **pay**/**xpay**/**renepay** can spend in a specific time window.
