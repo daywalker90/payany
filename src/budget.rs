@@ -5,7 +5,11 @@ use chrono::Utc;
 use cln_plugin::Plugin;
 use cln_rpc::{
     model::requests::{
-        DecodeRequest, GetinfoRequest, ListsendpaysIndex, ListsendpaysRequest, ListsendpaysStatus,
+        DecodeRequest,
+        GetinfoRequest,
+        ListsendpaysIndex,
+        ListsendpaysRequest,
+        ListsendpaysStatus,
     },
     ClnRpc,
 };

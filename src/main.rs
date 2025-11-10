@@ -3,7 +3,8 @@ use std::path::Path;
 use anyhow::anyhow;
 use cln_plugin::{
     options::{DefaultBooleanConfigOption, IntegerConfigOption, StringConfigOption},
-    Builder, RpcMethodBuilder,
+    Builder,
+    RpcMethodBuilder,
 };
 use cln_rpc::{model::requests::GetinfoRequest, ClnRpc};
 use hooks::hook_handler;

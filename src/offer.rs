@@ -1,5 +1,11 @@
 use std::{
-    collections::HashSet, future::Future, io, net::SocketAddr, path::Path, pin::Pin, str::FromStr,
+    collections::HashSet,
+    future::Future,
+    io,
+    net::SocketAddr,
+    path::Path,
+    pin::Pin,
+    str::FromStr,
     time::Duration,
 };
 
@@ -12,15 +18,13 @@ use cln_rpc::{
 };
 use hickory_resolver::{
     config::{ResolverConfig, ResolverOpts},
+    name_server::GenericConnector,
     proto::{
         rr::RecordType,
-        runtime::{RuntimeProvider, TokioHandle, TokioTime},
+        runtime::{iocompat::AsyncIoTokioAsStd, RuntimeProvider, TokioHandle, TokioTime},
     },
     system_conf::read_system_conf,
     Resolver,
-};
-use hickory_resolver::{
-    name_server::GenericConnector, proto::runtime::iocompat::AsyncIoTokioAsStd,
 };
 use serde_json::Map;
 use tokio::{
