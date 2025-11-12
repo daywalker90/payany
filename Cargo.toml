@@ -11,9 +11,9 @@ log-panics = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-cln-rpc = "0.4"
+cln-rpc = "0.5"
 # cln-rpc = { path="../../lightning/cln-rpc/", version = "^0.3" }
-cln-plugin = "0.4"
+cln-plugin = "0.5"
 # cln-plugin = { path="../../lightning/plugins/", version = "^0.3" }
 
 reqwest = { version = "0.12", default-features = false, features = ["http2", "json","rustls-tls", "socks"] }
