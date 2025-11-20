@@ -1,4 +1,4 @@
-use std::{path::Path, time::Duration};
+use std::{fmt::Write as _, path::Path, time::Duration};
 
 use anyhow::{anyhow, Context, Error};
 use cln_plugin::Plugin;
@@ -15,7 +15,7 @@ pub async fn fetch_invoice_lnurl(
     plugin: Plugin<PluginState>,
     invstring_name: &str,
     config_url: String,
-    lnaddress: Option<String>,
+    lnaddress: Option<&str>,
     amount_msat: Amount,
     message: Option<String>,
     params: &mut Map<String, serde_json::Value>,
@@ -54,7 +54,7 @@ pub async fn fetch_invoice_lnurl(
             .comment_allowed
             .ok_or_else(|| anyhow!("LNURL: message not supported for this address!"))?;
         if comment_length >= (msg.len() as u64) {
-            callback_url += &format!("&comment={msg}");
+            write!(callback_url, "&comment={msg}")?;
         } else {
             return Err(anyhow!(
                 "LNURL: message too long for this address! {}>{}",
@@ -86,20 +86,19 @@ pub async fn fetch_invoice_lnurl(
     {
         return Err(anyhow!(
             "Lnurl: wrong amount in invoice: {}!={}",
-            invoice_decoded.amount_msat.map(|a| a.msat()).unwrap_or(0),
+            invoice_decoded.amount_msat.map_or(0, |a| a.msat()),
             amount_msat.msat()
         ));
     }
     if invoice_decoded.description_hash.is_none() {
         if config.strict_lnurl {
             return Err(anyhow!("Strict mode: Lnurl: missing description hash!"));
-        } else {
-            // Some servers are not including a description hash
-            log::info!(
-                "Lnurl: missing description hash, please report to lnaddress \
-                service provider they are violating the spec in LUD-06"
-            );
         }
+        // Some servers are not including a description hash
+        log::info!(
+            "Lnurl: missing description hash, please report to lnaddress \
+            service provider they are violating the spec in LUD-06"
+        );
     } else {
         let metadata_hashed = Sha256::const_hash(lnurlp_config.metadata.as_bytes());
         log::debug!(
@@ -124,7 +123,7 @@ pub async fn fetch_invoice_lnurl(
 fn validate_lnurl_config(
     lnurl_config: &LnurlpConfig,
     amount_msat: Amount,
-    lnaddress: Option<String>,
+    lnaddress: Option<&str>,
     strict_lnurl: bool,
 ) -> Result<(), Error> {
     if !lnurl_config.tag.eq_ignore_ascii_case("payRequest") {
@@ -151,22 +150,17 @@ fn validate_lnurl_config(
     if let Some(lnaddr) = lnaddress {
         let metadata_json: serde_json::Value = serde_json::from_str(&lnurl_config.metadata)?;
         let mut lnaddress_found = false;
-        let metadata_outer_array = if let serde_json::Value::Array(meta_arr) = metadata_json {
-            meta_arr
-        } else {
+        let serde_json::Value::Array(metadata_outer_array) = metadata_json else {
             return Err(anyhow!("metadata not an array!: {}", lnurl_config.metadata));
         };
 
         for meta in metadata_outer_array {
-            let metadata_inner_array = if let serde_json::Value::Array(meta_inners) = meta {
-                meta_inners
-            } else {
+            let serde_json::Value::Array(metadata_inner_array) = meta else {
                 return Err(anyhow!("inner metadata not an array!: {}", &meta));
             };
             if metadata_inner_array.len() != 2 {
                 return Err(anyhow!(
-                    "inner metadata array is not of length 2!: {:?}",
-                    metadata_inner_array
+                    "inner metadata array is not of length 2!: {metadata_inner_array:?}"
                 ));
             }
             let data_type = metadata_inner_array
@@ -184,7 +178,7 @@ fn validate_lnurl_config(
                 .unwrap()
                 .as_str()
                 .ok_or(anyhow!("inner metadata content is not a string:"))?;
-            if data.eq_ignore_ascii_case(&lnaddr) {
+            if data.eq_ignore_ascii_case(lnaddr) {
                 lnaddress_found = true;
             }
         }
@@ -196,12 +190,11 @@ fn validate_lnurl_config(
                     "Strict mode: Lnaddress not found in metadata!: {}",
                     lnurl_config.metadata
                 ));
-            } else {
-                log::info!(
-                    "Lnaddress not found in metadata, please report to lnaddress \
-                service provider they are violating the spec in LUD-16"
-                );
             }
+            log::info!(
+                "Lnaddress not found in metadata, please report to lnaddress \
+            service provider they are violating the spec in LUD-16"
+            );
         }
     }
 
@@ -211,13 +204,13 @@ fn validate_lnurl_config(
 pub async fn resolve_lnurl(
     plugin: Plugin<PluginState>,
     invstring_name: &str,
-    invstring: String,
-    lnaddress: Option<String>,
+    invstring: &str,
+    lnaddress: Option<&str>,
     amount_msat: Amount,
     message: Option<String>,
     params: &mut Map<String, serde_json::Value>,
 ) -> Result<(), Error> {
-    let (hrp, config_url_bytes) = bech32::decode(&invstring)?;
+    let (hrp, config_url_bytes) = bech32::decode(invstring)?;
     let config_url = String::from_utf8(config_url_bytes)?;
     log::debug!("lnurl hrp:{hrp} url:{config_url}");
 

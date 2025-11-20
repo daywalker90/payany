@@ -94,7 +94,7 @@ impl ParamValue {
                     }
                 }
             },
-            ParamValue::Object(map) => params = map.to_owned(),
+            ParamValue::Object(map) => map.clone_into(&mut params),
             ParamValue::String(str) => match paycmd {
                 Paycmd::Pay => {
                     params.insert(config.payargs[0].clone(), json!(str));

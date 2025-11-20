@@ -32,9 +32,8 @@ pub async fn hook_handler(
                     message: e.to_string(),
                     data: None,
                 })}}));
-            } else {
-                return Ok(json!({"result":"continue"}));
             }
+            return Ok(json!({"result":"continue"}));
         }
         _ => return Ok(json!({"result":"continue"})),
     };
@@ -64,7 +63,7 @@ pub async fn hook_handler(
                 data: None,
             })}}));
         }
-    };
+    }
     params_as_object.remove("message");
 
     if let Err(e) = budget_check(plugin.clone(), &params_as_object, paycmd).await {
@@ -104,25 +103,23 @@ fn check_setconfig(param_val: ParamValue) -> Result<(), anyhow::Error> {
     match param_val {
         ParamValue::Array(values) => {
             if let Some(f) = values.first() {
-                config = Some(f.as_str().unwrap().to_owned())
+                config = Some(f.as_str().unwrap().to_owned());
             } else {
                 return Ok(());
             }
             if let Some(v) = values.get(1) {
-                val = Some(v.clone())
+                val = Some(v.clone());
             } else {
                 return Ok(());
             }
         }
         ParamValue::Object(map) => {
             config = map.get("config").map(|s| s.as_str().unwrap().to_owned());
-            val = map.get("val").cloned()
+            val = map.get("val").cloned();
         }
         ParamValue::String(s) => config = Some(s),
-    };
-    let config = if let Some(c) = config {
-        c
-    } else {
+    }
+    let Some(config) = config else {
         return Ok(());
     };
     if config.eq_ignore_ascii_case("xpay-handle-pay") {
@@ -135,17 +132,15 @@ fn check_setconfig(param_val: ParamValue) -> Result<(), anyhow::Error> {
                 return Err(anyhow!(
                     "Setting xpay-handle-pay to true when payany is active is blocked"
                 ));
-            } else {
-                return Ok(());
             }
+            return Ok(());
         } else if let Some(s) = val.as_str() {
             if s.eq_ignore_ascii_case("true") || s.eq_ignore_ascii_case("1") {
                 return Err(anyhow!(
                     "Setting xpay-handle-pay to true when payany is active is blocked"
                 ));
-            } else {
-                return Ok(());
             }
+            return Ok(());
         }
     }
 

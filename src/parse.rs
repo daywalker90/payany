@@ -42,31 +42,31 @@ fn parse_time_period(input: &str) -> Result<u64, anyhow::Error> {
                 TimeUnit::Week => Ok(value * 60 * 60 * 24 * 7),
             }
         } else {
-            Err(anyhow!(format!("Unsupported time unit: {}", unit)))
+            Err(anyhow!(format!("Unsupported time unit: {unit}")))
         }
     } else {
-        Err(anyhow!("Invalid time format: {}", input))
+        Err(anyhow!("Invalid time format: {input}"))
     }
 }
 
 pub fn get_startup_options(
     plugin: &ConfiguredPlugin<PluginState, tokio::io::Stdin, tokio::io::Stdout>,
-    state: PluginState,
+    state: &PluginState,
 ) -> Result<(), anyhow::Error> {
     let mut config = state.config.lock();
 
     if let Some(bamt) = plugin.option_str(OPT_PAYANY_BUDGET_AMOUNT_MSAT)? {
         check_option(&mut config, OPT_PAYANY_BUDGET_AMOUNT_MSAT, &bamt)?;
-    };
+    }
     if let Some(bper) = plugin.option_str(OPT_PAYANY_BUDGET_PER)? {
         check_option(&mut config, OPT_PAYANY_BUDGET_PER, &bper)?;
-    };
+    }
     if let Some(handle) = plugin.option_str(OPT_PAYANY_HANDLE_PAY)? {
         check_option(&mut config, OPT_PAYANY_HANDLE_PAY, &handle)?;
-    };
+    }
     if let Some(handle) = plugin.option_str(OPT_PAYANY_STRICT_LNURL)? {
         check_option(&mut config, OPT_PAYANY_STRICT_LNURL, &handle)?;
-    };
+    }
     if config.budget_amount_msat.is_some() || config.budget_per.is_some() {
         if config.budget_amount_msat.is_some() && config.budget_per.is_some() {
             log::info!(
@@ -78,7 +78,7 @@ pub fn get_startup_options(
             return Err(anyhow!("Incomplete Budget options!"));
         }
     } else {
-        log::info!("No Budget set!")
+        log::info!("No Budget set!");
     }
 
     Ok(())
@@ -136,7 +136,7 @@ fn parse_option(name: &str, value: &serde_json::Value) -> Result<options::Value,
                     return Ok(options::Value::Integer(n_neg_i64));
                 }
             }
-            Err(anyhow!("{} is not a valid integer!", n))
+            Err(anyhow!("{n} is not a valid integer!"))
         }
         n if n.eq(OPT_PAYANY_HANDLE_PAY) | n.eq(OPT_PAYANY_STRICT_LNURL) => {
             if let Some(n_bool) = value.as_bool() {
@@ -146,13 +146,13 @@ fn parse_option(name: &str, value: &serde_json::Value) -> Result<options::Value,
                     return Ok(options::Value::Boolean(n_str_bool));
                 }
             }
-            Err(anyhow!("{} is not a valid boolean!", n))
+            Err(anyhow!("{n} is not a valid boolean!"))
         }
         _ => {
             if value.is_string() {
                 Ok(options::Value::String(value.as_str().unwrap().to_owned()))
             } else {
-                Err(anyhow!("{} is not a valid string!", name))
+                Err(anyhow!("{name} is not a valid string!"))
             }
         }
     }
@@ -172,17 +172,17 @@ fn check_option(
             )?));
         }
         n if n.eq(OPT_PAYANY_BUDGET_PER) => {
-            config.budget_per = Some(parse_time_period(value.as_str().unwrap())?)
+            config.budget_per = Some(parse_time_period(value.as_str().unwrap())?);
         }
         n if n.eq(OPT_PAYANY_HANDLE_PAY) => {
             if config.xpayargs.is_empty() {
                 config.xpay_handle_pay = false;
             } else {
-                config.xpay_handle_pay = value.as_bool().unwrap()
+                config.xpay_handle_pay = value.as_bool().unwrap();
             }
         }
         n if n.eq(OPT_PAYANY_STRICT_LNURL) => config.strict_lnurl = value.as_bool().unwrap(),
-        _ => return Err(anyhow!("Unknown option: {}", name)),
+        _ => return Err(anyhow!("Unknown option: {name}")),
     }
     Ok(())
 }
@@ -192,9 +192,7 @@ fn options_value_to_u64(name: &str, value: i64, gteq: u64) -> Result<u64, anyhow
         validate_u64_input(value as u64, name, gteq)
     } else {
         Err(anyhow!(
-            "{} needs to be a positive number and not `{}`.",
-            name,
-            value
+            "{name} needs to be a positive number and not `{value}`."
         ))
     }
 }
@@ -202,9 +200,7 @@ fn options_value_to_u64(name: &str, value: i64, gteq: u64) -> Result<u64, anyhow
 fn validate_u64_input(n: u64, var_name: &str, gteq: u64) -> Result<u64, anyhow::Error> {
     if n < gteq {
         return Err(anyhow!(
-            "{} must be greater than or equal to {}",
-            var_name,
-            gteq
+            "{var_name} must be greater than or equal to {gteq}"
         ));
     }
 
@@ -261,13 +257,13 @@ pub async fn convert_pay_to_xpay(
         let exclude_array = excl
             .as_array()
             .ok_or_else(|| anyhow!("exclude is not an array"))?;
-        for ex in exclude_array.iter() {
-            if let Ok(chan) = serde_json::from_value(ex.clone()) {
+        for ex in exclude_array {
+            if let Ok(chan) = serde_json::from_value::<ShortChannelIdDir>(ex.clone()) {
                 exclude_chans.push(chan);
-            } else if let Ok(node) = serde_json::from_value(ex.clone()) {
+            } else if let Ok(node) = serde_json::from_value::<PublicKey>(ex.clone()) {
                 exclude_nodes.push(node);
             } else {
-                return Err(anyhow!("Could not parse exclude channel/peer:{}", ex));
+                return Err(anyhow!("Could not parse exclude channel/peer:{ex}"));
             }
         }
 
@@ -285,14 +281,14 @@ pub async fn convert_pay_to_xpay(
             .await?
             .layers;
         let layer = layers.first().unwrap();
-        for node in exclude_nodes.into_iter() {
+        for node in exclude_nodes {
             rpc.call_typed(&AskrenedisablenodeRequest {
                 layer: layer.layer.clone(),
                 node,
             })
             .await?;
         }
-        for chan in exclude_chans.into_iter() {
+        for chan in exclude_chans {
             rpc.call_typed(&AskreneupdatechannelRequest {
                 cltv_expiry_delta: None,
                 enabled: Some(false),
@@ -331,16 +327,10 @@ pub fn get_maxfee(
         let maxfee_absolut = if let Some(maxfeep) = maxfeepercent_param {
             let mfp = match maxfeep {
                 serde_json::Value::Number(number) => number.as_f64().ok_or_else(|| {
-                    anyhow!(
-                        "maxfeepercent: should be a floating-point number: {}",
-                        number
-                    )
+                    anyhow!("maxfeepercent: should be a floating-point number: {number}")
                 }),
                 serde_json::Value::String(s) => s.parse::<f64>().map_err(|_e| {
-                    anyhow!(
-                        "maxfeepercent: cound not parse string as a floating-point number: {}",
-                        s
-                    )
+                    anyhow!("maxfeepercent: cound not parse string as a floating-point number: {s}")
                 }),
                 _ => Err(anyhow!("maxfeepercent is not a number or string!")),
             };
@@ -400,11 +390,11 @@ pub async fn parse_pay_args(plugin: Plugin<PluginState>) -> Result<(), anyhow::E
     let mut config = plugin.state().config.lock();
 
     if let Some(hp) = help_pay.first() {
-        for arg in hp.command.split(" ") {
+        for arg in hp.command.split(' ') {
             if arg.eq("pay") {
                 continue;
             }
-            if arg.starts_with("[") {
+            if arg.starts_with('[') {
                 config.payargs.push(arg[1..arg.len() - 1].to_owned());
             } else {
                 config.payargs.push(arg.to_owned());
@@ -414,11 +404,11 @@ pub async fn parse_pay_args(plugin: Plugin<PluginState>) -> Result<(), anyhow::E
     }
 
     if let Some(hxp) = help_xpay.first() {
-        for arg in hxp.command.split(" ") {
+        for arg in hxp.command.split(' ') {
             if arg.eq("xpay") {
                 continue;
             }
-            if arg.starts_with("[") {
+            if arg.starts_with('[') {
                 config.xpayargs.push(arg[1..arg.len() - 1].to_owned());
             } else {
                 config.xpayargs.push(arg.to_owned());
@@ -428,11 +418,11 @@ pub async fn parse_pay_args(plugin: Plugin<PluginState>) -> Result<(), anyhow::E
     }
 
     if let Some(hrp) = help_renepay.first() {
-        for arg in hrp.command.split(" ") {
+        for arg in hrp.command.split(' ') {
             if arg.eq("renepay") {
                 continue;
             }
-            if arg.starts_with("[") {
+            if arg.starts_with('[') {
                 config.renepayargs.push(arg[1..arg.len() - 1].to_owned());
             } else {
                 config.renepayargs.push(arg.to_owned());
@@ -463,13 +453,13 @@ fn test_time_parse() {
     let result = parse_time_period("1 s").unwrap();
     assert_eq!(result, 1);
     let result = parse_time_period("3days").unwrap();
-    assert_eq!(result, 259200);
+    assert_eq!(result, 259_200);
     let result = parse_time_period("5h").unwrap();
     assert_eq!(result, 18000);
     let result = parse_time_period("2m").unwrap();
     assert_eq!(result, 120);
     let result = parse_time_period("5w").unwrap();
-    assert_eq!(result, 3024000);
+    assert_eq!(result, 3_024_000);
     let result = parse_time_period("3    hours").unwrap();
     assert_eq!(result, 10800);
 }

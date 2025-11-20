@@ -76,7 +76,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .await?
     {
         Some(plugin) => {
-            match get_startup_options(&plugin, state.clone()) {
+            match get_startup_options(&plugin, &state) {
                 Ok(()) => &(),
                 Err(e) => return plugin.disable(format!("{e}").as_str()).await,
             };
@@ -103,10 +103,7 @@ async fn main() -> Result<(), anyhow::Error> {
             config.version = cln_version;
 
             let configs_val = configs_val_response.get("configs").ok_or_else(|| {
-                anyhow!(
-                    "No configs found in listconfigs response: {:?}",
-                    configs_val_response
-                )
+                anyhow!("No configs found in listconfigs response: {configs_val_response:?}")
             })?;
 
             config.tor_proxy = if let Some(pc) = configs_val.get("proxy") {
@@ -136,7 +133,7 @@ async fn main() -> Result<(), anyhow::Error> {
             };
         }
         match parse_pay_args(plugin.clone()).await {
-            Ok(_) => (),
+            Ok(()) => (),
             Err(e) => {
                 println!(
                     "{}",
@@ -147,11 +144,11 @@ async fn main() -> Result<(), anyhow::Error> {
                 );
                 return Err(e);
             }
-        };
+        }
         match check_handle_option(plugin.clone()).await {
             Ok(()) => (),
             Err(e) => log::info!("{e}"),
-        };
+        }
         log::debug!("ready");
         plugin.join().await
     } else {

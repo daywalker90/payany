@@ -45,7 +45,7 @@ pub async fn check_handle_option(plugin: Plugin<PluginState>) -> Result<(), anyh
             })
             .await?;
         }
-        log::info!("Found activated `xpay-handle-pay`, `payany` deactivated it!")
+        log::info!("Found activated `xpay-handle-pay`, `payany` deactivated it!");
     }
 
     Ok(())
@@ -65,7 +65,7 @@ pub fn at_or_above_version(my_version: &str, min_version: &str) -> Result<bool, 
     let min_version_parts: Vec<&str> = min_version.split('.').collect();
 
     if my_version_parts.len() <= 1 || my_version_parts.len() > 3 {
-        return Err(anyhow!("Version string parse error: {}", my_version));
+        return Err(anyhow!("Version string parse error: {my_version}"));
     }
     for (my, min) in my_version_parts.iter().zip(min_version_parts.iter()) {
         let my_num: u32 = my.parse()?;

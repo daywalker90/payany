@@ -12,7 +12,7 @@ pub async fn payany(
 ) -> Result<serde_json::Value, Error> {
     let mut params = Map::new();
     if let Some(args_obj) = args.as_object() {
-        params = args_obj.clone();
+        params.clone_from(args_obj);
     } else if let Some(args_arr) = args.as_array() {
         for (i, arg) in args_arr.iter().enumerate() {
             params.insert(PAYANYARGS[i].to_owned(), arg.clone());
@@ -24,6 +24,6 @@ pub async fn payany(
             params.remove("message");
             return Err(anyhow!(e.to_string()));
         }
-    };
+    }
     Ok(json!({"invoice":format!("{}", params.get("invstring").unwrap().as_str().unwrap())}))
 }

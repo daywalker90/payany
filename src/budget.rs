@@ -34,7 +34,7 @@ pub async fn budget_check(
     let budget_per = config.budget_per.unwrap();
     let now_stamp = Utc::now().timestamp() as u64;
     let time_window = now_stamp - budget_per;
-    let pending_deadline = now_stamp - 2592000;
+    let pending_deadline = now_stamp - 2_592_000;
     let mut budget_amount_msat_used = 0;
     let mut pay_created_index = None;
 
@@ -107,7 +107,7 @@ pub async fn budget_check(
         .await?
         .payments;
 
-    for pp in pending_pays.iter() {
+    for pp in &pending_pays {
         if let Some(dest) = pp.destination {
             if dest == getinfo.id {
                 continue;
@@ -121,15 +121,15 @@ pub async fn budget_check(
         if let Some(ppci) = pp.created_index {
             if let Some(ci) = pay_created_index {
                 if ppci < ci {
-                    pay_created_index = Some(ppci)
+                    pay_created_index = Some(ppci);
                 }
             } else {
-                pay_created_index = Some(ppci)
+                pay_created_index = Some(ppci);
             }
         }
     }
 
-    for cp in completed_pays.iter() {
+    for cp in &completed_pays {
         if let Some(dest) = cp.destination {
             if dest == getinfo.id {
                 continue;
@@ -143,10 +143,10 @@ pub async fn budget_check(
         if let Some(cpci) = cp.created_index {
             if let Some(ci) = pay_created_index {
                 if cpci < ci {
-                    pay_created_index = Some(cpci)
+                    pay_created_index = Some(cpci);
                 }
             } else {
-                pay_created_index = Some(cpci)
+                pay_created_index = Some(cpci);
             }
         }
     }
@@ -157,9 +157,7 @@ pub async fn budget_check(
 
     if budget_amount_msat_used > budget_amount_msat {
         return Err(anyhow!(
-            "Budget would be exceeded! {}msat / {}msat",
-            budget_amount_msat_used,
-            budget_amount_msat
+            "Budget would be exceeded! {budget_amount_msat_used}msat / {budget_amount_msat}msat"
         ));
     }
     log::info!(

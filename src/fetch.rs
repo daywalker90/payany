@@ -25,12 +25,12 @@ pub async fn resolve_invstring(
             .to_owned()
             .to_lowercase()
     } else {
-        return Err(anyhow!("missing required parameter: {}", invstring_name));
+        return Err(anyhow!("missing required parameter: {invstring_name}"));
     };
-    let mut invstring_lower = invstring_lower_presplit;
+    let mut invstring_lower = invstring_lower_presplit.as_str();
     for uri_scheme in URI_SCHEMES {
         if let Some(stripped) = invstring_lower.strip_prefix(uri_scheme) {
-            invstring_lower = stripped.to_owned();
+            invstring_lower = stripped;
             break;
         }
     }
@@ -66,7 +66,7 @@ pub async fn resolve_invstring(
             params,
         )
         .await;
-    } else if invstring_lower.contains("@") {
+    } else if invstring_lower.contains('@') {
         log::debug!("lnaddress detected");
         if amount_msat.is_none() {
             return Err(anyhow!("lnaddress: missing amount_msat"));
@@ -91,24 +91,23 @@ pub async fn resolve_invstring(
             params,
         )
         .await;
-    } else {
-        log::debug!("regular invoice forwarded");
-        return Ok(());
     }
+    log::debug!("regular invoice forwarded");
+    Ok(())
 }
 
 async fn resolve_lnaddress(
     plugin: Plugin<PluginState>,
     invstring_name: &str,
-    lnaddress: String,
+    lnaddress: &str,
     amount_msat: Amount,
     message: Option<String>,
     params: &mut Map<String, serde_json::Value>,
 ) -> Result<(), Error> {
-    let address_parts = lnaddress.split("@").collect::<Vec<&str>>();
+    let address_parts = lnaddress.split('@').collect::<Vec<&str>>();
 
     if address_parts.len() != 2 {
-        return Err(anyhow!("LN-address invalid: {}", lnaddress));
+        return Err(anyhow!("LN-address invalid: {lnaddress}"));
     }
 
     let user = address_parts.first().unwrap();
@@ -149,10 +148,8 @@ async fn resolve_lnaddress(
     {
         Ok(lnurl) => Ok(lnurl),
         Err(lnurl_error) => Err(anyhow!(
-            "Error fetching invoice from bip353:{} and error fetching \
-                    invoice from lnurl: {}",
-            bip353_error,
-            lnurl_error
+            "Error fetching invoice from bip353:{bip353_error} and error fetching \
+                    invoice from lnurl: {lnurl_error}"
         )),
     }
 }

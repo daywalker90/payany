@@ -38,7 +38,7 @@ use crate::PluginState;
 pub async fn fetch_invoice_bolt12(
     plugin: Plugin<PluginState>,
     invstring_name: &str,
-    invstring: String,
+    invstring: &str,
     amount_msat: Option<Amount>,
     message: Option<String>,
     params: &mut Map<String, serde_json::Value>,
@@ -50,7 +50,7 @@ pub async fn fetch_invoice_bolt12(
 
     let offer_decoded = rpc
         .call_typed(&DecodeRequest {
-            string: invstring.clone(),
+            string: invstring.to_owned(),
         })
         .await?;
 
@@ -94,7 +94,7 @@ pub async fn fetch_invoice_bolt12(
             recurrence_label: None,
             recurrence_start: None,
             timeout: None,
-            offer: invstring,
+            offer: invstring.to_owned(),
             bip353: None,
         })
         .await?;
@@ -215,14 +215,14 @@ pub async fn fetch_invoice_bip353(
                     if let Some(_bip21) = bip21_result {
                         return Err(anyhow!("multiple bip21 entries found in txt records!"));
                     }
-                    bip21_result = Some(txt.split_once(":").unwrap().1.to_owned())
+                    bip21_result = Some(txt.split_once(':').unwrap().1.to_owned());
                 }
             }
 
             if let Some(bip21) = bip21_result {
-                for bip21_param in bip21.split("?") {
+                for bip21_param in bip21.split('?') {
                     if bip21_param.starts_with("lno=") {
-                        let offer = bip21_param.strip_prefix("lno=").unwrap().to_owned();
+                        let offer = bip21_param.strip_prefix("lno=").unwrap();
                         log::debug!("bip353 offer: {offer}");
                         return fetch_invoice_bolt12(
                             plugin,
