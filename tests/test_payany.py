@@ -6,6 +6,7 @@ import os
 import time
 
 import pytest
+from pathlib import Path
 from pyln.client import RpcError
 from pyln.testing.fixtures import *  # noqa: F403
 from pyln.testing.utils import wait_for
@@ -470,7 +471,7 @@ def test_lnurl(node_factory, get_plugin):  # noqa: F811
             },
             {
                 "log-level": "debug",
-                "plugin": os.path.join(os.getcwd(), "tests/clnaddress"),
+                "plugin": os.path.join(Path(__file__).parent.resolve(), "clnaddress"),
                 "clnaddress-listen": url,
                 "clnaddress-base-url": f"http://{url}/",
                 "clnaddress-description": "testing_description",
