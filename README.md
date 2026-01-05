@@ -2,48 +2,48 @@
   <tr>
     <td>
       <a href="https://github.com/daywalker90/payany/actions/workflows/latest_v25.02.yml">
-        <img src="https://github.com/daywalker90/payany/actions/workflows/latest_v25.02.yml/badge.svg?branch=main">
+        <img src="https://github.com/daywalker90/payany/actions/workflows/latest_v25.02.yml/badge.svg?branch=master">
       </a>
     </td>
     <td>
-      <a href="https://github.com/daywalker90/payany/actions/workflows/main_v25.02.yml">
-        <img src="https://github.com/daywalker90/payany/actions/workflows/main_v25.02.yml/badge.svg?branch=main">
+      <a href="https://github.com/daywalker90/payany/actions/workflows/master_v25.02.yml">
+        <img src="https://github.com/daywalker90/payany/actions/workflows/master_v25.02.yml/badge.svg?branch=master">
       </a>
     </td>
   </tr>
   <tr>
     <td>
       <a href="https://github.com/daywalker90/payany/actions/workflows/latest_v25.05.yml">
-        <img src="https://github.com/daywalker90/payany/actions/workflows/latest_v25.05.yml/badge.svg?branch=main">
+        <img src="https://github.com/daywalker90/payany/actions/workflows/latest_v25.05.yml/badge.svg?branch=master">
       </a>
     </td>
     <td>
-      <a href="https://github.com/daywalker90/payany/actions/workflows/main_v25.05.yml">
-        <img src="https://github.com/daywalker90/payany/actions/workflows/main_v25.05.yml/badge.svg?branch=main">
+      <a href="https://github.com/daywalker90/payany/actions/workflows/master_v25.05.yml">
+        <img src="https://github.com/daywalker90/payany/actions/workflows/master_v25.05.yml/badge.svg?branch=master">
       </a>
     </td>
   </tr>
   <tr>
     <td>
       <a href="https://github.com/daywalker90/payany/actions/workflows/latest_v25.09.yml">
-        <img src="https://github.com/daywalker90/payany/actions/workflows/latest_v25.09.yml/badge.svg?branch=main">
+        <img src="https://github.com/daywalker90/payany/actions/workflows/latest_v25.09.yml/badge.svg?branch=master">
       </a>
     </td>
     <td>
-      <a href="https://github.com/daywalker90/payany/actions/workflows/main_v25.09.yml">
-        <img src="https://github.com/daywalker90/payany/actions/workflows/main_v25.09.yml/badge.svg?branch=main">
+      <a href="https://github.com/daywalker90/payany/actions/workflows/master_v25.09.yml">
+        <img src="https://github.com/daywalker90/payany/actions/workflows/master_v25.09.yml/badge.svg?branch=master">
       </a>
     </td>
   </tr>
   <tr>
     <td>
       <a href="https://github.com/daywalker90/payany/actions/workflows/latest_v25.12.yml">
-        <img src="https://github.com/daywalker90/payany/actions/workflows/latest_v25.12.yml/badge.svg?branch=main">
+        <img src="https://github.com/daywalker90/payany/actions/workflows/latest_v25.12.yml/badge.svg?branch=master">
       </a>
     </td>
     <td>
-      <a href="https://github.com/daywalker90/payany/actions/workflows/main_v25.12.yml">
-        <img src="https://github.com/daywalker90/payany/actions/workflows/main_v25.12.yml/badge.svg?branch=main">
+      <a href="https://github.com/daywalker90/payany/actions/workflows/master_v25.12.yml">
+        <img src="https://github.com/daywalker90/payany/actions/workflows/master_v25.12.yml/badge.svg?branch=master">
       </a>
     </td>
   </tr>
@@ -98,19 +98,19 @@ When using **pay**/**xpay**/**renepay** combined with **payany** and lightning p
 
 Using **pay**/**xpay**/**renepay** with **payany** enables you to use them like this:
 
-`lightning-cli xpay user@domain.com 10000`
+`lightning-cli xpay user@domaster.com 10000`
 
-`lightning-cli pay user@domain.com 10000`
+`lightning-cli pay user@domaster.com 10000`
 
-`lightning-cli renepay user@domain.com 10000`
+`lightning-cli renepay user@domaster.com 10000`
 
 When using the **message** argument it's usually easier to use the key=value format since **message** is in the last position of all the arguments of **pay**/**xpay**/**renepay** (and there are also **dev_** arguments not listed in the documentation!):
 
-`lightning-cli xpay invstring=user@domain.com amount_msat=10000 message="thanks for the item"`
+`lightning-cli xpay invstring=user@domaster.com amount_msat=10000 message="thanks for the item"`
 
-`lightning-cli pay bolt11=user@domain.com amount_msat=10000 message="thanks for the item"`
+`lightning-cli pay bolt11=user@domaster.com amount_msat=10000 message="thanks for the item"`
 
-`lightning-cli renepay invstring=user@domain.com amount_msat=10000 message="thanks for the item"`
+`lightning-cli renepay invstring=user@domaster.com amount_msat=10000 message="thanks for the item"`
 
 :warning:**payany** will set ``xpay-handle-pay`` to ``false``, see ``payany-xpay-handle-pay`` option
 
@@ -142,7 +142,7 @@ Example if you want your node to only be able to spend 100.000 sats per week: ``
 You can use this command to only fetch the invoice and not pay it directly:
 * **payany** *invstring* *amount_msat* [*message*]
     * returns the *invoice* for an offer, bip353 ln-address, bech32-encoded LNURLP or LNURL-based ln-address
-    * ***invstring***: the address you want to pay e.g. `user@domain.com` or `LNURL1DP6[..]6C72PP7X`
+    * ***invstring***: the address you want to pay e.g. `user@domaster.com` or `LNURL1DP6[..]6C72PP7X`
     * ***amount_msat***: the amount in msat you intend to pay. Always required for safety checks.
     * ***message***: an optional message you intend to send to the payee. This is either put in the *comment* field for LNURL based methods or in the *payer_note* for bolt12 based methods.
 
