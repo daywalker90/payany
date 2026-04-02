@@ -118,14 +118,12 @@ pub async fn budget_check(
         }
         budget_amount_msat_used += pp.amount_sent_msat.msat();
 
-        if let Some(ppci) = pp.created_index {
-            if let Some(ci) = pay_created_index {
-                if ppci < ci {
-                    pay_created_index = Some(ppci);
-                }
-            } else {
-                pay_created_index = Some(ppci);
+        if let Some(ci) = pay_created_index {
+            if pp.created_index < ci {
+                pay_created_index = Some(pp.created_index);
             }
+        } else {
+            pay_created_index = Some(pp.created_index);
         }
     }
 
@@ -140,14 +138,12 @@ pub async fn budget_check(
         }
         budget_amount_msat_used += cp.amount_sent_msat.msat();
 
-        if let Some(cpci) = cp.created_index {
-            if let Some(ci) = pay_created_index {
-                if cpci < ci {
-                    pay_created_index = Some(cpci);
-                }
-            } else {
-                pay_created_index = Some(cpci);
+        if let Some(ci) = pay_created_index {
+            if cp.created_index < ci {
+                pay_created_index = Some(cp.created_index);
             }
+        } else {
+            pay_created_index = Some(cp.created_index);
         }
     }
 

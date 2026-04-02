@@ -2,11 +2,13 @@ use std::path::Path;
 
 use anyhow::anyhow;
 use cln_plugin::{
-    options::{DefaultBooleanConfigOption, IntegerConfigOption, StringConfigOption},
     Builder,
+    HookBuilder,
+    HookFilter,
     RpcMethodBuilder,
+    options::{DefaultBooleanConfigOption, IntegerConfigOption, StringConfigOption},
 };
-use cln_rpc::{model::requests::GetinfoRequest, ClnRpc};
+use cln_rpc::{ClnRpc, model::requests::GetinfoRequest};
 use hooks::hook_handler;
 use parse::{get_startup_options, parse_pay_args, setconfig_callback};
 use rpc::payany;
@@ -31,7 +33,7 @@ const OPT_PAYANY_STRICT_LNURL: &str = "payany-strict-lnurl";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), anyhow::Error> {
-    std::env::set_var("CLN_PLUGIN_LOG", "payany=trace,info");
+    unsafe { std::env::set_var("CLN_PLUGIN_LOG", "payany=trace,info") };
     log_panics::init();
 
     let state = PluginState::default();
@@ -69,7 +71,12 @@ async fn main() -> Result<(), anyhow::Error> {
                 .description("fetch invoice for static ln payment method")
                 .usage("invstring amount_msat [message]"),
         )
-        .hook("rpc_command", hook_handler)
+        .hook_from_builder(HookBuilder::new("rpc_command", hook_handler).filters(vec![
+            HookFilter::Str("xpay".to_owned()),
+            HookFilter::Str("pay".to_owned()),
+            HookFilter::Str("renepay".to_owned()),
+            HookFilter::Str("setconfig".to_owned()),
+        ]))
         .setconfig_callback(setconfig_callback)
         .dynamic()
         .configure()
@@ -86,72 +93,73 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         None => return Err(anyhow!("Error configuring payany!")),
     };
-    if let Ok(plugin) = confplugin.start(state).await {
-        {
-            let mut rpc = ClnRpc::new(
-                Path::new(&plugin.configuration().lightning_dir)
-                    .join(plugin.configuration().rpc_file),
-            )
-            .await?;
+    match confplugin.start(state).await {
+        Ok(plugin) => {
+            {
+                let mut rpc = ClnRpc::new(
+                    Path::new(&plugin.configuration().lightning_dir)
+                        .join(plugin.configuration().rpc_file),
+                )
+                .await?;
 
-            let cln_version = rpc.call_typed(&GetinfoRequest {}).await?.version;
+                let cln_version = rpc.call_typed(&GetinfoRequest {}).await?.version;
 
-            let configs_val_response: serde_json::Value =
-                rpc.call_raw("listconfigs", &json!({})).await?;
+                let configs_val_response: serde_json::Value =
+                    rpc.call_raw("listconfigs", &json!({})).await?;
 
-            let mut config = plugin.state().config.lock();
-            config.version = cln_version;
+                let mut config = plugin.state().config.lock();
+                config.version = cln_version;
 
-            let configs_val = configs_val_response.get("configs").ok_or_else(|| {
-                anyhow!("No configs found in listconfigs response: {configs_val_response:?}")
-            })?;
+                let configs_val = configs_val_response.get("configs").ok_or_else(|| {
+                    anyhow!("No configs found in listconfigs response: {configs_val_response:?}")
+                })?;
 
-            config.tor_proxy = if let Some(pc) = configs_val.get("proxy") {
-                if let Some(ap) = configs_val.get("always-use-proxy") {
-                    if ap
-                        .get("value_bool")
-                        .ok_or_else(|| anyhow!("always-use-proxy missing value_bool"))?
-                        .as_bool()
-                        .ok_or_else(|| anyhow!("always-use-proxy is not a boolean!"))?
-                    {
-                        let proxy = pc
-                            .get("value_str")
-                            .ok_or_else(|| anyhow!("proxy missing value_str"))?
-                            .as_str()
-                            .ok_or_else(|| anyhow!("proxy is not a string!"))?
-                            .to_owned();
-                        log::info!("Using tor proxy: {proxy}");
-                        Some(proxy)
+                config.tor_proxy = if let Some(pc) = configs_val.get("proxy") {
+                    if let Some(ap) = configs_val.get("always-use-proxy") {
+                        if ap
+                            .get("value_bool")
+                            .ok_or_else(|| anyhow!("always-use-proxy missing value_bool"))?
+                            .as_bool()
+                            .ok_or_else(|| anyhow!("always-use-proxy is not a boolean!"))?
+                        {
+                            let proxy = pc
+                                .get("value_str")
+                                .ok_or_else(|| anyhow!("proxy missing value_str"))?
+                                .as_str()
+                                .ok_or_else(|| anyhow!("proxy is not a string!"))?
+                                .to_owned();
+                            log::info!("Using tor proxy: {proxy}");
+                            Some(proxy)
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }
                 } else {
                     None
-                }
-            } else {
-                None
-            };
-        }
-        match parse_pay_args(plugin.clone()).await {
-            Ok(()) => (),
-            Err(e) => {
-                println!(
-                    "{}",
-                    serde_json::json!({"jsonrpc": "2.0",
+                };
+            }
+            match parse_pay_args(plugin.clone()).await {
+                Ok(()) => (),
+                Err(e) => {
+                    println!(
+                        "{}",
+                        serde_json::json!({"jsonrpc": "2.0",
                                     "method": "log",
                                     "params": {"level":"warn",
                                     "message":format!("Error parsing pay args: {}", e)}})
-                );
-                return Err(e);
+                    );
+                    return Err(e);
+                }
             }
+            match check_handle_option(plugin.clone()).await {
+                Ok(()) => (),
+                Err(e) => log::info!("{e}"),
+            }
+            log::debug!("ready");
+            plugin.join().await
         }
-        match check_handle_option(plugin.clone()).await {
-            Ok(()) => (),
-            Err(e) => log::info!("{e}"),
-        }
-        log::debug!("ready");
-        plugin.join().await
-    } else {
-        Err(anyhow!("Error starting payany!"))
+        _ => Err(anyhow!("Error starting payany!")),
     }
 }
