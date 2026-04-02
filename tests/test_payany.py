@@ -411,10 +411,12 @@ def test_pay_to_xpay_fees(node_factory, get_plugin):  # noqa: F811
     l2.rpc.call("setchannel", {"id": ch1, "feebase": 10000, "enforcedelay": 0})
 
     wait_for(
-        lambda: l1.rpc.call("listchannels", {"destination": l3.info["id"]})["channels"][
-            0
-        ]["base_fee_millisatoshi"]
-        == 10000
+        lambda: (
+            l1.rpc.call("listchannels", {"destination": l3.info["id"]})["channels"][0][
+                "base_fee_millisatoshi"
+            ]
+            == 10000
+        )
     )
 
     invoice = l3.rpc.call("invoice", [950000, "test", "test"])
