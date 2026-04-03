@@ -4,6 +4,7 @@
 
 ### Changed
 - updated cln-rpc and cln-plugin dependencies
+- make use of new HookBuilder to only intercept relevant rpc commands and not all of them, reducing CPU useage
 
 ## [0.3.0] 2025-07-07
 ### Removed
