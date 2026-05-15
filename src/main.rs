@@ -8,13 +8,17 @@ use cln_plugin::{
     RpcMethodBuilder,
     options::{DefaultBooleanConfigOption, IntegerConfigOption, StringConfigOption},
 };
-use cln_rpc::{ClnRpc, model::requests::GetinfoRequest};
+use cln_rpc::{
+    ClnRpc,
+    model::requests::{GetinfoRequest, ListconfigsRequest},
+};
 use hooks::hook_handler;
 use parse::{get_startup_options, parse_pay_args, setconfig_callback};
 use rpc::payany;
-use serde_json::json;
 use structs::PluginState;
 use util::check_handle_option;
+
+use crate::util::at_or_above_version;
 
 mod budget;
 mod fetch;
@@ -104,32 +108,20 @@ async fn main() -> Result<(), anyhow::Error> {
 
                 let cln_version = rpc.call_typed(&GetinfoRequest {}).await?.version;
 
-                let configs_val_response: serde_json::Value =
-                    rpc.call_raw("listconfigs", &json!({})).await?;
+                let listconfigs = rpc
+                    .call_typed(&ListconfigsRequest { config: None })
+                    .await?
+                    .configs
+                    .ok_or_else(|| anyhow!("No `configs` found in listconfigs response"))?;
 
                 let mut config = plugin.state().config.lock();
                 config.version = cln_version;
 
-                let configs_val = configs_val_response.get("configs").ok_or_else(|| {
-                    anyhow!("No configs found in listconfigs response: {configs_val_response:?}")
-                })?;
-
-                config.tor_proxy = if let Some(pc) = configs_val.get("proxy") {
-                    if let Some(ap) = configs_val.get("always-use-proxy") {
-                        if ap
-                            .get("value_bool")
-                            .ok_or_else(|| anyhow!("always-use-proxy missing value_bool"))?
-                            .as_bool()
-                            .ok_or_else(|| anyhow!("always-use-proxy is not a boolean!"))?
-                        {
-                            let proxy = pc
-                                .get("value_str")
-                                .ok_or_else(|| anyhow!("proxy missing value_str"))?
-                                .as_str()
-                                .ok_or_else(|| anyhow!("proxy is not a string!"))?
-                                .to_owned();
-                            log::info!("Using tor proxy: {proxy}");
-                            Some(proxy)
+                config.tor_proxy = if let Some(proxy_config) = listconfigs.proxy {
+                    if let Some(always_use_proxy_config) = listconfigs.always_use_proxy {
+                        if always_use_proxy_config.value_bool {
+                            log::info!("Using tor proxy: {}", proxy_config.value_str);
+                            Some(proxy_config.value_str)
                         } else {
                             None
                         }
@@ -139,6 +131,17 @@ async fn main() -> Result<(), anyhow::Error> {
                 } else {
                     None
                 };
+
+                let allow_deprecated_apis =
+                    if let Some(deprecated_apis_config) = listconfigs.allow_deprecated_apis {
+                        deprecated_apis_config.value_bool
+                    } else {
+                        true
+                    };
+
+                config.ignore_deprecated_pays = (at_or_above_version(&config.version, "26.06")?
+                    && !allow_deprecated_apis)
+                    || at_or_above_version(&config.version, "27.03")?;
             }
             match parse_pay_args(plugin.clone()).await {
                 Ok(()) => (),

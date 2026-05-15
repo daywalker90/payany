@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use cln_rpc::primitives::Amount;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map};
+use serde_json::{Map, json};
 
 pub const URI_SCHEMES: [&str; 3] = ["lightning:", "lno:", "lnurl:"];
 
@@ -32,6 +32,7 @@ pub struct Config {
     pub renepayargs: Vec<String>,
     pub strict_lnurl: bool,
     pub version: String,
+    pub ignore_deprecated_pays: bool,
     pub tor_proxy: Option<String>,
 }
 

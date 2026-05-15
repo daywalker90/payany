@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Error};
+use anyhow::{Error, anyhow};
 use cln_plugin::Plugin;
 use cln_rpc::primitives::Amount;
 use serde_json::Map;
@@ -6,22 +6,24 @@ use serde_json::Map;
 use crate::{
     lnurl::{fetch_invoice_lnurl, resolve_lnurl},
     offer::{fetch_invoice_bip353, fetch_invoice_bolt12},
-    structs::{Paycmd, PluginState, URI_SCHEMES},
+    structs::{PluginState, URI_SCHEMES},
 };
 
 pub async fn resolve_invstring(
     plugin: Plugin<PluginState>,
     params: &mut Map<String, serde_json::Value>,
-    paycmd: Paycmd,
 ) -> Result<(), Error> {
-    let invstring_name = match paycmd {
-        Paycmd::Pay => "bolt11",
-        Paycmd::Xpay | Paycmd::Renepay => "invstring",
+    let invstring_name = if params.get("invstring").is_some() {
+        "invstring"
+    } else if params.get("bolt11").is_some() {
+        "bolt11"
+    } else {
+        return Err(anyhow!("missing required parameter: `invstring`/`bolt11`"));
     };
     let invstring_lower_presplit = if let Some(invstr) = params.get(invstring_name) {
         invstr
             .as_str()
-            .ok_or_else(|| anyhow!("`invstring` must be a string"))?
+            .ok_or_else(|| anyhow!("{invstring_name} must be a string: {invstr}"))?
             .to_owned()
             .to_lowercase()
     } else {

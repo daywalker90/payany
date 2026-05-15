@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Error};
+use anyhow::{Error, anyhow};
 use cln_plugin::Plugin;
-use serde_json::{json, Map};
+use serde_json::{Map, json};
 
-use crate::{fetch::resolve_invstring, structs::Paycmd, PluginState};
+use crate::{PluginState, fetch::resolve_invstring};
 
 const PAYANYARGS: [&str; 3] = ["invstring", "amount_msat", "message"];
 
@@ -18,7 +18,7 @@ pub async fn payany(
             params.insert(PAYANYARGS[i].to_owned(), arg.clone());
         }
     }
-    match resolve_invstring(plugin, &mut params, Paycmd::Xpay).await {
+    match resolve_invstring(plugin, &mut params).await {
         Ok(o) => o,
         Err(e) => {
             params.remove("message");

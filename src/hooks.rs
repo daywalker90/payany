@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Error};
+use anyhow::{Error, anyhow};
 use cln_plugin::Plugin;
 use cln_rpc::RpcError;
 use serde_json::json;
@@ -41,6 +41,14 @@ pub async fn hook_handler(
     log::debug!("params: {:?}", root.rpc_command.params);
 
     let config = plugin.state().config.lock().clone();
+
+    if config.ignore_deprecated_pays {
+        match paycmd {
+            Paycmd::Xpay => (),
+            Paycmd::Pay | Paycmd::Renepay => return Ok(json!({"result":"continue"})),
+        }
+    }
+
     let mut params_as_object = match root.rpc_command.params.to_object(paycmd, &config) {
         Ok(o) => o,
         Err(e) => {
@@ -48,12 +56,12 @@ pub async fn hook_handler(
                 code: Some(-32602),
                 message: e.to_string(),
                 data: None,
-            })}}))
+            })}}));
         }
     };
     log::debug!("params_obj: {params_as_object:?}");
 
-    match resolve_invstring(plugin.clone(), &mut params_as_object, paycmd).await {
+    match resolve_invstring(plugin.clone(), &mut params_as_object).await {
         Ok(o) => o,
         Err(e) => {
             params_as_object.remove("message");

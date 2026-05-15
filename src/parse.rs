@@ -1,8 +1,10 @@
 use std::path::Path;
 
 use anyhow::anyhow;
-use cln_plugin::{options, ConfiguredPlugin, Plugin};
+use cln_plugin::{ConfiguredPlugin, Plugin, options};
 use cln_rpc::{
+    ClnRpc,
+    RpcError,
     model::requests::{
         AskrenecreatelayerRequest,
         AskrenedisablenodeRequest,
@@ -12,19 +14,17 @@ use cln_rpc::{
         HelpRequest,
     },
     primitives::{Amount, PublicKey, ShortChannelIdDir},
-    ClnRpc,
-    RpcError,
 };
-use serde_json::{json, Map};
+use serde_json::{Map, json};
 
 use crate::{
-    structs::{Config, TimeUnit},
-    util::at_or_above_version,
-    PluginState,
     OPT_PAYANY_BUDGET_AMOUNT_MSAT,
     OPT_PAYANY_BUDGET_PER,
     OPT_PAYANY_HANDLE_PAY,
     OPT_PAYANY_STRICT_LNURL,
+    PluginState,
+    structs::{Config, TimeUnit},
+    util::at_or_above_version,
 };
 
 fn parse_time_period(input: &str) -> Result<u64, anyhow::Error> {
@@ -211,8 +211,9 @@ pub async fn convert_pay_to_xpay(
     plugin: Plugin<PluginState>,
     params: &mut Map<String, serde_json::Value>,
 ) -> Result<(), anyhow::Error> {
-    let invstring = params.remove("bolt11").unwrap();
-    params.insert("invstring".to_owned(), invstring.clone());
+    if let Some(invstring) = params.remove("bolt11") {
+        params.insert("invstring".to_owned(), invstring.clone());
+    }
     let maxfeepercent = params.remove("maxfeepercent");
     let exemptfee = params.remove("exemptfee");
     let exclude = params.remove("exclude");
@@ -229,7 +230,12 @@ pub async fn convert_pay_to_xpay(
 
     let invoice_decoded = rpc
         .call_typed(&DecodeRequest {
-            string: invstring.as_str().unwrap().to_owned(),
+            string: params
+                .get("invstring")
+                .ok_or_else(|| anyhow!("missing required argument: `invstring`"))?
+                .as_str()
+                .unwrap()
+                .to_owned(),
         })
         .await?;
     let invoice_amt_msat = match invoice_decoded.item_type {
@@ -352,6 +358,7 @@ pub fn get_maxfee(
     }
 }
 
+#[allow(clippy::similar_names)]
 pub async fn parse_pay_args(plugin: Plugin<PluginState>) -> Result<(), anyhow::Error> {
     let mut rpc = ClnRpc::new(
         Path::new(&plugin.configuration().lightning_dir).join(plugin.configuration().rpc_file),
@@ -360,12 +367,15 @@ pub async fn parse_pay_args(plugin: Plugin<PluginState>) -> Result<(), anyhow::E
 
     let config = plugin.state().config.lock().clone();
 
-    let help_pay = rpc
-        .call_typed(&HelpRequest {
+    let help_pay = if config.ignore_deprecated_pays {
+        Vec::new()
+    } else {
+        rpc.call_typed(&HelpRequest {
             command: Some("pay".to_owned()),
         })
         .await?
-        .help;
+        .help
+    };
 
     let help_xpay = if at_or_above_version(&config.version, "24.11")? {
         rpc.call_typed(&HelpRequest {
@@ -377,21 +387,22 @@ pub async fn parse_pay_args(plugin: Plugin<PluginState>) -> Result<(), anyhow::E
         Vec::new()
     };
 
-    let help_renepay = if at_or_above_version(&config.version, "23.08")? {
-        rpc.call_typed(&HelpRequest {
-            command: Some("renepay".to_owned()),
-        })
-        .await?
-        .help
-    } else {
-        Vec::new()
-    };
+    let help_renepay =
+        if at_or_above_version(&config.version, "23.08")? && !config.ignore_deprecated_pays {
+            rpc.call_typed(&HelpRequest {
+                command: Some("renepay".to_owned()),
+            })
+            .await?
+            .help
+        } else {
+            Vec::new()
+        };
 
     let mut config = plugin.state().config.lock();
 
     if let Some(hp) = help_pay.first() {
         for arg in hp.command.split(' ') {
-            if arg.eq("pay") {
+            if arg.eq("pay") || arg.eq("(DEPRECATED!)") {
                 continue;
             }
             if arg.starts_with('[') {
@@ -405,7 +416,7 @@ pub async fn parse_pay_args(plugin: Plugin<PluginState>) -> Result<(), anyhow::E
 
     if let Some(hxp) = help_xpay.first() {
         for arg in hxp.command.split(' ') {
-            if arg.eq("xpay") {
+            if arg.eq("xpay") || arg.eq("(DEPRECATED!)") {
                 continue;
             }
             if arg.starts_with('[') {
@@ -419,7 +430,7 @@ pub async fn parse_pay_args(plugin: Plugin<PluginState>) -> Result<(), anyhow::E
 
     if let Some(hrp) = help_renepay.first() {
         for arg in hrp.command.split(' ') {
-            if arg.eq("renepay") {
+            if arg.eq("renepay") || arg.eq("(DEPRECATED!)") {
                 continue;
             }
             if arg.starts_with('[') {
@@ -440,9 +451,12 @@ pub async fn parse_pay_args(plugin: Plugin<PluginState>) -> Result<(), anyhow::E
     {
         config.xpay_handle_pay = !config.xpayargs.is_empty();
     }
-    log::debug!("payargs:{}", config.payargs.join(" "));
+
     log::debug!("xpayargs:{}", config.xpayargs.join(" "));
-    log::debug!("renepayargs:{}", config.renepayargs.join(" "));
+    if !config.ignore_deprecated_pays {
+        log::debug!("payargs:{}", config.payargs.join(" "));
+        log::debug!("renepayargs:{}", config.renepayargs.join(" "));
+    }
     Ok(())
 }
 

@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use chrono::Utc;
 use cln_plugin::Plugin;
 use cln_rpc::{
+    ClnRpc,
     model::requests::{
         DecodeRequest,
         GetinfoRequest,
@@ -11,7 +12,6 @@ use cln_rpc::{
         ListsendpaysRequest,
         ListsendpaysStatus,
     },
-    ClnRpc,
 };
 use serde_json::Map;
 
@@ -44,9 +44,20 @@ pub async fn budget_check(
     .await?;
 
     let invoice = match paycmd {
-        Paycmd::Pay => params.get("bolt11").unwrap().as_str().unwrap().to_owned(),
-        Paycmd::Xpay | Paycmd::Renepay => params
-            .get("invstring")
+        Paycmd::Pay => params
+            .get(config.payargs.first().unwrap())
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_owned(),
+        Paycmd::Xpay => params
+            .get(config.xpayargs.first().unwrap())
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_owned(),
+        Paycmd::Renepay => params
+            .get(config.renepayargs.first().unwrap())
             .unwrap()
             .as_str()
             .unwrap()
