@@ -1,28 +1,24 @@
 use std::{fmt::Write as _, path::Path, time::Duration};
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error, anyhow};
 use cln_plugin::Plugin;
 use cln_rpc::{
+    ClnRpc,
     model::requests::DecodeRequest,
     primitives::{Amount, Sha256},
-    ClnRpc,
 };
 use serde_json::Map;
 
-use crate::structs::{LnurlpCallback, LnurlpConfig, PluginState};
+use crate::structs::{Config, LnurlpCallback, LnurlpConfig, PluginState};
 
-pub async fn fetch_invoice_lnurl(
-    plugin: Plugin<PluginState>,
-    invstring_name: &str,
-    config_url: String,
+pub async fn try_fetch_lnurl(
+    config: &Config,
     lnaddress: Option<&str>,
+    config_url: String,
     amount_msat: Amount,
     message: Option<String>,
-    params: &mut Map<String, serde_json::Value>,
-) -> Result<(), Error> {
-    let config = plugin.state().config.lock().clone();
-
-    let client = if let Some(tp) = config.tor_proxy {
+) -> Result<(LnurlpCallback, LnurlpConfig), Error> {
+    let client = if let Some(tp) = &config.tor_proxy {
         let proxy = reqwest::Proxy::all(format!("socks5h://{tp}"))?;
         reqwest::Client::builder()
             .proxy(proxy)
@@ -33,7 +29,13 @@ pub async fn fetch_invoice_lnurl(
             .timeout(Duration::from_secs(30))
             .build()?
     };
-    let lnurlp_config_raw = client.get(config_url).send().await?;
+    let lnurlp_config_raw = match client.get(config_url).send().await {
+        Ok(o) => o,
+        Err(e) => {
+            log::warn!("LNURL: failed to fetch lnurl config: {:?}", e);
+            return Err(anyhow!(e));
+        }
+    };
     if !lnurlp_config_raw.status().is_success() {
         return Err(anyhow!(
             "LNURL: got bad status for lnurl config: {}",
@@ -71,7 +73,18 @@ pub async fn fetch_invoice_lnurl(
         ));
     }
     let callback_response = callback_response_raw.json::<LnurlpCallback>().await?;
+    Ok((callback_response, lnurlp_config))
+}
 
+pub async fn process_lnurl_invoice(
+    plugin: Plugin<PluginState>,
+    invstring_name: &str,
+    callback_response: LnurlpCallback,
+    lnurlp_config: LnurlpConfig,
+    amount_msat: Amount,
+    config: &Config,
+    params: &mut Map<String, serde_json::Value>,
+) -> Result<(), Error> {
     let mut rpc = ClnRpc::new(
         Path::new(&plugin.configuration().lightning_dir).join(plugin.configuration().rpc_file),
     )
@@ -214,13 +227,18 @@ pub async fn resolve_lnurl(
     let config_url = String::from_utf8(config_url_bytes)?;
     log::debug!("lnurl hrp:{hrp} url:{config_url}");
 
-    fetch_invoice_lnurl(
+    let config = plugin.state().config.lock().clone();
+
+    let (lnurlp_callback, lnurlp_config) =
+        try_fetch_lnurl(&config, lnaddress, config_url, amount_msat, message).await?;
+
+    process_lnurl_invoice(
         plugin,
         invstring_name,
-        config_url,
-        lnaddress,
+        lnurlp_callback,
+        lnurlp_config,
         amount_msat,
-        message,
+        &config,
         params,
     )
     .await

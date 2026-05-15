@@ -15,7 +15,7 @@ from util import get_plugin  # noqa: F401
 LOGGER = logging.getLogger(__name__)
 
 
-def test_payany_with_offer(node_factory, get_plugin):  # noqa: F811
+def test_payany_with_offer_and_bi353(node_factory, get_plugin):  # noqa: F811
     opts = [{"plugin": get_plugin, "log-level": "debug"}, {"log-level": "debug"}]
 
     l1, l2 = node_factory.line_graph(
@@ -25,16 +25,6 @@ def test_payany_with_offer(node_factory, get_plugin):  # noqa: F811
     )
 
     offer = l2.rpc.call("offer", {"amount": "any", "description": "testpayany"})
-    with pytest.raises(
-        RpcError, match="offer has `any` amount, must specify `amount_msat`"
-    ):
-        l1.rpc.call(
-            "payany",
-            {
-                "invstring": offer["bolt12"],
-            },
-        )
-    time.sleep(1)
     result = l1.rpc.call(
         "payany",
         {
@@ -43,60 +33,42 @@ def test_payany_with_offer(node_factory, get_plugin):  # noqa: F811
             "message": "test1",
         },
     )
-    time.sleep(1)
-    decoded = l1.rpc.call("decode", {"string": result["invoice"]})
-    assert decoded["invoice_amount_msat"] == 1_000
-    assert decoded["invreq_payer_note"] == "test1"
+    assert result["invoice"] == offer["bolt12"]
 
-    offer = l2.rpc.call("offer", {"amount": 2_000, "description": "testing"})
     result = l1.rpc.call(
         "payany",
         {
-            "invstring": offer["bolt12"],
+            "invstring": "test@notalnurlserver.gz",
             "amount_msat": 2_000,
             "message": "test2",
         },
     )
-    time.sleep(1)
-    decoded = l1.rpc.call("decode", {"string": result["invoice"]})
-    assert decoded["invoice_amount_msat"] == 2_000
-    assert decoded["invreq_payer_note"] == "test2"
+    assert result["invoice"] == "test@notalnurlserver.gz"
 
-    result = l1.rpc.call(
-        "payany",
-        {
-            "invstring": offer["bolt12"],
-            "message": "test3",
-        },
+
+def test_xpay_supercharged(node_factory, get_plugin, lnurl_server):  # noqa: F811
+    opts = {"plugin": get_plugin, "log-level": "debug"}
+
+    l1 = node_factory.get_node(
+        options=opts,
     )
-    decoded = l1.rpc.call("decode", {"string": result["invoice"]})
-    assert decoded["invoice_amount_msat"] == 2_000
-    assert decoded["invreq_payer_note"] == "test3"
+    l2 = lnurl_server["node"]
+    l1.fundchannel(l2, 1_000_000, wait_for_active=True)
 
-
-def test_xpay_supercharged(node_factory, get_plugin):  # noqa: F811
-    opts = [{"plugin": get_plugin, "log-level": "debug"}, {"log-level": "debug"}]
-
-    l1, l2 = node_factory.line_graph(
-        2,
-        wait_for_announce=True,
-        opts=opts,
-    )
-    offer = l2.rpc.call("offer", {"amount": "any", "description": "testpayany"})
+    lnurl = lnurl_server["lnurl"]
     result = l1.rpc.call(
-        "xpay", {"invstring": offer["bolt12"], "amount_msat": 3_000, "message": "test3"}
+        "xpay", {"invstring": lnurl, "amount_msat": 3_000, "message": "test3"}
     )
     assert result["amount_msat"] == 3_000
     pay = l2.rpc.call("listinvoices", {})["invoices"]
     assert pay[0]["amount_msat"] == 3_000
-    assert pay[0]["invreq_payer_note"] == "test3"
+    assert pay[0]["description"] == "test3"
 
-    offer = l2.rpc.call("offer", {"amount": 2_000, "description": "testing"})
-    result = l1.rpc.call("xpay", [offer["bolt12"], 2_000])
+    result = l1.rpc.call("xpay", [lnurl, 2_000])
     assert result["amount_msat"] == 2_000
     pay = l2.rpc.call("listinvoices", {})["invoices"]
     assert pay[1]["amount_msat"] == 2_000
-    assert "invreq_payer_note" not in pay[1]
+    assert pay[1]["description"] == "pytest lnurl server"
 
     with pytest.raises(
         RpcError, match="missing required parameter: `invstring`/`bolt11`"
@@ -104,34 +76,36 @@ def test_xpay_supercharged(node_factory, get_plugin):  # noqa: F811
         result = l1.rpc.call("xpay", [])
 
 
-def test_pay_supercharged(node_factory, get_plugin, pay_renepay_deprecated):  # noqa: F811
-    opts = [
-        {"plugin": get_plugin, "log-level": "debug"},
-        {"log-level": "debug"},
-    ]
+def test_pay_supercharged(
+    node_factory,
+    get_plugin,  # noqa: F811
+    pay_renepay_deprecated,
+    lnurl_server,
+):
+    opts = {"plugin": get_plugin, "log-level": "debug"}
     if pay_renepay_deprecated:
-        opts[0]["allow-deprecated-apis"] = True
+        opts["allow-deprecated-apis"] = True
 
-    l1, l2 = node_factory.line_graph(
-        2,
-        wait_for_announce=True,
-        opts=opts,
+    l1 = node_factory.get_node(
+        options=opts,
     )
-    offer = l2.rpc.call("offer", {"amount": "any", "description": "testpayany"})
+    l2 = lnurl_server["node"]
+    l1.fundchannel(l2, 1_000_000, wait_for_active=True)
+
+    lnurl = lnurl_server["lnurl"]
     result = l1.rpc.call(
-        "pay", {"bolt11": offer["bolt12"], "amount_msat": 3_000, "message": "test3"}
+        "pay", {"bolt11": lnurl, "amount_msat": 3_000, "message": "test3"}
     )
     assert result["amount_msat"] == 3_000
     pay = l2.rpc.call("listinvoices", {})["invoices"]
     assert pay[0]["amount_msat"] == 3_000
-    assert pay[0]["invreq_payer_note"] == "test3"
+    assert pay[0]["description"] == "test3"
 
-    offer = l2.rpc.call("offer", {"amount": 2_000, "description": "testing"})
-    result = l1.rpc.call("pay", [offer["bolt12"], 2_000])
+    result = l1.rpc.call("pay", [lnurl, 2_000])
     assert result["amount_msat"] == 2_000
     pay = l2.rpc.call("listinvoices", {})["invoices"]
     assert pay[1]["amount_msat"] == 2_000
-    assert "invreq_payer_note" not in pay[1]
+    assert pay[1]["description"] == "pytest lnurl server"
 
     with pytest.raises(
         RpcError, match="missing required parameter: `invstring`/`bolt11`"
@@ -139,32 +113,38 @@ def test_pay_supercharged(node_factory, get_plugin, pay_renepay_deprecated):  # 
         result = l1.rpc.call("pay", [])
 
 
-def test_renepay_supercharged(node_factory, get_plugin, pay_renepay_deprecated):  # noqa: F811
-    opts = [{"plugin": get_plugin, "log-level": "debug"}, {"log-level": "debug"}]
+@pytest.mark.asyncio
+async def test_renepay_supercharged(
+    node_factory,
+    get_plugin,  # noqa: F811
+    pay_renepay_deprecated,
+    lnurl_server,
+):
+    opts = {"plugin": get_plugin, "log-level": "debug"}
     if pay_renepay_deprecated:
-        opts[0]["allow-deprecated-apis"] = True
+        opts["allow-deprecated-apis"] = True
 
-    l1, l2 = node_factory.line_graph(
-        2,
-        wait_for_announce=True,
-        opts=opts,
+    l1 = node_factory.get_node(
+        options=opts,
     )
-    offer = l2.rpc.call("offer", {"amount": "any", "description": "testpayany"})
+    l2 = lnurl_server["node"]
+    l1.fundchannel(l2, 1_000_000, wait_for_active=True)
+
+    lnurl = lnurl_server["lnurl"]
     result = l1.rpc.call(
         "renepay",
-        {"invstring": offer["bolt12"], "amount_msat": 3_000, "message": "test3"},
+        {"invstring": lnurl, "amount_msat": 3_000, "message": "test3"},
     )
     assert result["amount_msat"] == 3_000
     pay = l2.rpc.call("listinvoices", {})["invoices"]
     assert pay[0]["amount_msat"] == 3_000
-    assert pay[0]["invreq_payer_note"] == "test3"
+    assert pay[0]["description"] == "test3"
 
-    offer = l2.rpc.call("offer", {"amount": 2_000, "description": "testing"})
-    result = l1.rpc.call("renepay", [offer["bolt12"], 2_000])
+    result = l1.rpc.call("renepay", [lnurl, 2_000])
     assert result["amount_msat"] == 2_000
     pay = l2.rpc.call("listinvoices", {})["invoices"]
     assert pay[1]["amount_msat"] == 2_000
-    assert "invreq_payer_note" not in pay[1]
+    assert pay[1]["description"] == "pytest lnurl server"
 
     with pytest.raises(
         RpcError, match="missing required parameter: `invstring`/`bolt11`"
@@ -481,5 +461,5 @@ def test_lnurl(node_factory, get_plugin):  # noqa: F811
         ["text/email", f"testuser@{url}"],
     ]
 
-    with pytest.raises(RpcError, match="404"):
+    with pytest.raises(RpcError, match="invalid address"):
         l1.rpc.call("xpay", {"invstring": f"fakeuser@{url}", "amount_msat": 2600})

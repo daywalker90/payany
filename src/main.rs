@@ -24,7 +24,6 @@ mod budget;
 mod fetch;
 mod hooks;
 mod lnurl;
-mod offer;
 mod parse;
 mod rpc;
 mod structs;
@@ -39,6 +38,7 @@ const OPT_PAYANY_STRICT_LNURL: &str = "payany-strict-lnurl";
 async fn main() -> Result<(), anyhow::Error> {
     unsafe { std::env::set_var("CLN_PLUGIN_LOG", "payany=trace,info") };
     log_panics::init();
+    let _ = rustls::crypto::ring::default_provider().install_default();
 
     let state = PluginState::default();
 

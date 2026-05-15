@@ -4,8 +4,7 @@ use cln_rpc::primitives::Amount;
 use serde_json::Map;
 
 use crate::{
-    lnurl::{fetch_invoice_lnurl, resolve_lnurl},
-    offer::{fetch_invoice_bip353, fetch_invoice_bolt12},
+    lnurl::{process_lnurl_invoice, resolve_lnurl, try_fetch_lnurl},
     structs::{PluginState, URI_SCHEMES},
 };
 
@@ -83,16 +82,8 @@ pub async fn resolve_invstring(
         )
         .await;
     } else if invstring_lower.starts_with("lno") {
-        log::debug!("bolt12 offer detected");
-        return fetch_invoice_bolt12(
-            plugin,
-            invstring_name,
-            invstring_lower,
-            amount_msat,
-            message,
-            params,
-        )
-        .await;
+        log::debug!("regular bolt12 offer forwarded");
+        return Ok(());
     }
     log::debug!("regular invoice forwarded");
     Ok(())
@@ -116,42 +107,42 @@ async fn resolve_lnaddress(
 
     let domain = address_parts.get(1).unwrap();
 
-    let bip353_error = match fetch_invoice_bip353(
-        plugin.clone(),
-        invstring_name,
-        user,
-        domain,
-        amount_msat,
-        message.clone(),
-        params,
-    )
-    .await
-    {
-        Ok(()) => return Ok(()),
-        Err(e) => e,
-    };
-
     let ln_service_url = if domain.contains("localhost") || domain.contains("127.0.0.1") {
         format!("http://{domain}/.well-known/lnurlp/{user}")
     } else {
         format!("https://{domain}/.well-known/lnurlp/{user}")
     };
 
-    match fetch_invoice_lnurl(
-        plugin,
-        invstring_name,
-        ln_service_url,
+    let config = plugin.state().config.lock().clone();
+
+    let (lnurlp_callback, lnurlp_config) = match try_fetch_lnurl(
+        &config,
         Some(lnaddress),
+        ln_service_url,
         amount_msat,
         message,
+    )
+    .await
+    {
+        Ok((cb, cf)) => (cb, cf),
+        Err(e) => {
+            log::info!("Error fetching lnurlp config: {e}, trying bip353 instead...");
+            return Ok(());
+        }
+    };
+
+    match process_lnurl_invoice(
+        plugin,
+        invstring_name,
+        lnurlp_callback,
+        lnurlp_config,
+        amount_msat,
+        &config,
         params,
     )
     .await
     {
         Ok(lnurl) => Ok(lnurl),
-        Err(lnurl_error) => Err(anyhow!(
-            "Error fetching invoice from bip353:{bip353_error} and error fetching \
-                    invoice from lnurl: {lnurl_error}"
-        )),
+        Err(lnurl_error) => Err(anyhow!("Error fetching invoice from lnurl: {lnurl_error}")),
     }
 }

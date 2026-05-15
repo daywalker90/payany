@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Removed
+- starting with CLN v25.09 `xpay` can handle offers and bip353 directly so handling is removed here.
+
 ## [0.3.1] 2026-04-03
 
 ### Changed

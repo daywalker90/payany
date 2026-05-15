@@ -16,16 +16,17 @@ cln-rpc = "0.6"
 cln-plugin = "0.6"
 # cln-plugin = { path = "../lightning/plugins/", version = "^0.6" }
 
-reqwest = { version = "0.12", default-features = false, features = [
+reqwest = { version = "0.13", default-features = false, features = [
     "http2",
     "json",
-    "rustls-tls",
+    "rustls-no-provider",
     "socks",
 ] }
-hickory-resolver = { version = "0.25.1", features = [
-    "dnssec-ring",
-    "https-ring",
-    "webpki-roots",
+rustls = { version = "0.23", default-features = false, features = [
+    "logging",
+    "tls12",
+    "std",
+    "ring",
 ] }
 
 tokio-socks = "0.5"
