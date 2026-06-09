@@ -6,7 +6,7 @@
 - starting with CLN v25.09 `xpay` can handle offers and bip353 directly so handling is removed here.
 
 ### Changed
-= updated cln-rpc and cln-plugin to v0.7
+- updated cln-rpc and cln-plugin to v0.7
 
 ### Fixed
 - handle renepay and pay deprecation
