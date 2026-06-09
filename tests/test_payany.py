@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import time
 
 import pytest
 from pathlib import Path
@@ -152,7 +151,12 @@ async def test_renepay_supercharged(
         result = l1.rpc.call("renepay", [])
 
 
-def test_budget(node_factory, get_plugin, pay_renepay_deprecated):  # noqa: F811
+def test_budget(
+    node_factory,
+    get_plugin,  # noqa: F811
+    pay_renepay_deprecated,
+    xpay_payer_note_added,
+):
     opts = [
         {
             "plugin": get_plugin,
@@ -196,8 +200,9 @@ def test_budget(node_factory, get_plugin, pay_renepay_deprecated):  # noqa: F811
         "maxfee": 5000,
         "retry_for": 30,
         "maxdelay": 200,
-        "payer_note": "note",
     }
+    if xpay_payer_note_added:
+        xpay_params["payer_note"] = "note"
     if pay_renepay_deprecated:
         xpay_params["label"] = "ignored"
 
@@ -258,21 +263,23 @@ def test_budget(node_factory, get_plugin, pay_renepay_deprecated):  # noqa: F811
     l1.rpc.call("setconfig", ["payany-budget-amount-msat", 4000000])
     offer = l3.rpc.call("offer", {"amount": 950000, "description": "testpayany"})
     bolt12 = l1.rpc.call("fetchinvoice", [offer["bolt12"]])
+    xpay_params = {
+        "invstring": bolt12["invoice"],
+        "label": "ignored",
+        "maxfee": 3000,
+        "retry_for": 30,
+        "maxdelay": 200,
+        "localinvreqid": "7f9b2c6d7a9b3b204b6d3cfe8d88f9b42b650cd6c57df3a4e1f7a08d14968e2c",
+    }
+    if xpay_payer_note_added:
+        xpay_params["payer_note"] = "test3"
     with pytest.raises(
         RpcError,
         match="Unknown invoice_request 7f9b2c6d7a9b3b204b6d3cfe8d88f9b42b650cd6c57df3a4e1f7a08d14968e2c",
     ):
         l1.rpc.call(
             "xpay",
-            {
-                "invstring": bolt12["invoice"],
-                "label": "ignored",
-                "maxfee": 3000,
-                "retry_for": 30,
-                "maxdelay": 200,
-                "payer_note": "test3",
-                "localinvreqid": "7f9b2c6d7a9b3b204b6d3cfe8d88f9b42b650cd6c57df3a4e1f7a08d14968e2c",
-            },
+            xpay_params,
         )
 
 
