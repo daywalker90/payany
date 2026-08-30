@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import threading
 
 import pytest
 from pathlib import Path
@@ -243,6 +244,8 @@ def test_budget(
             {"invstring": invoice5["bolt11"], "layers": ["testbudget2"], **xpay_params},
         )
 
+    l1.rpc.call("setconfig", ["payany-budget-amount-msat", 4000000])
+
     invoice6 = l3.rpc.call(
         "invoice",
         {
@@ -260,7 +263,7 @@ def test_budget(
     if not pay_renepay_deprecated:
         return
 
-    l1.rpc.call("setconfig", ["payany-budget-amount-msat", 4000000])
+    l1.rpc.call("setconfig", ["payany-budget-amount-msat", 5000000])
     offer = l3.rpc.call("offer", {"amount": 950000, "description": "testpayany"})
     bolt12 = l1.rpc.call("fetchinvoice", [offer["bolt12"]])
     xpay_params = {
@@ -470,3 +473,45 @@ def test_lnurl(node_factory, get_plugin):  # noqa: F811
 
     with pytest.raises(RpcError, match="invalid address"):
         l1.rpc.call("xpay", {"invstring": f"fakeuser@{url}", "amount_msat": 2600})
+
+
+def test_budget_concurrent(node_factory, get_plugin):  # noqa: F811
+    opts = [
+        {
+            "plugin": get_plugin,
+            "payany-budget-per": "5 hours",
+            "payany-budget-amount-msat": 1000000,
+            "log-level": "debug",
+        },
+        {"log-level": "debug"},
+    ]
+
+    l1, l2 = node_factory.line_graph(
+        2,
+        wait_for_announce=True,
+        opts=opts,
+    )
+
+    invoice1 = l2.rpc.call("invoice", [600000, "concurrent1", "concurrent1"])
+    invoice2 = l2.rpc.call("invoice", [600000, "concurrent2", "concurrent2"])
+
+    results = []
+
+    def pay(invstring):
+        try:
+            l1.rpc.call("xpay", {"invstring": invstring, "maxfee": 1000})
+            results.append("success")
+        except RpcError as e:
+            results.append(str(e))
+
+    threads = [
+        threading.Thread(target=pay, args=(invoice1["bolt11"],)),
+        threading.Thread(target=pay, args=(invoice2["bolt11"],)),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(30)
+
+    assert sorted(result == "success" for result in results) == [False, True]
+    assert any("payany budget exceeded" in result for result in results)
