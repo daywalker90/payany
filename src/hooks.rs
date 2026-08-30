@@ -5,7 +5,7 @@ use serde_json::{Map, json};
 
 use crate::{
     budget::budget_check,
-    fetch::resolve_invstring,
+    fetch::{resolve_invstring, resolve_offer_invoice},
     parse::convert_pay_to_xpay,
     structs::{Config, ParamValue, Paycmd, PluginState, RpcCommand},
 };
@@ -81,6 +81,15 @@ pub async fn hook_handler(
         })}}));
     }
     params_as_object.remove("message");
+
+    if let Err(e) = resolve_offer_invoice(plugin.clone(), &config, &mut params_as_object).await
+    {
+        return Ok(json!({"return": {"error":json!(RpcError {
+            code: Some(-32602),
+            message: format!("payany could not fetch invoice: {e}"),
+            data: None,
+        })}}));
+    }
 
     if let Err(e) = budget_check(plugin.clone(), &params_as_object, paycmd).await {
         return Ok(json!({"return": {"error":json!(RpcError {
