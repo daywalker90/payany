@@ -225,29 +225,50 @@ pub async fn convert_pay_to_xpay(
 
     params.retain(|param, _| config.xpayargs.contains(param));
 
+    let invstring = params
+        .get("invstring")
+        .ok_or_else(|| anyhow!("missing required argument: `invstring`"))?
+        .as_str()
+        .ok_or_else(|| anyhow!("invstring is not a string"))?
+        .to_owned();
+
+    let is_bare_offer = invstring.to_lowercase().starts_with("lno");
+    let is_bip353 = invstring.contains('@');
+    if is_bare_offer || is_bip353 {
+        if maxfeepercent.is_some() || exemptfee.is_some() || exclude.is_some() {
+            return Err(anyhow!(
+                "maxfeepercent/exemptfee/exclude cannot be converted for a bare offer or \
+                bip353 address, use `maxfee` instead"
+            ));
+        }
+        return Ok(());
+    }
+
     let mut rpc = ClnRpc::new(
         Path::new(&plugin.configuration().lightning_dir).join(plugin.configuration().rpc_file),
     )
     .await?;
 
-    let invoice_decoded = rpc
-        .call_typed(&DecodeRequest {
-            string: params
-                .get("invstring")
-                .ok_or_else(|| anyhow!("missing required argument: `invstring`"))?
-                .as_str()
-                .unwrap()
-                .to_owned(),
-        })
-        .await?;
+    let invoice_decoded = rpc.call_typed(&DecodeRequest { string: invstring }).await?;
     let invoice_amt_msat = match invoice_decoded.item_type {
         cln_rpc::model::responses::DecodeType::BOLT12_INVOICE => {
-            invoice_decoded.invoice_amount_msat.unwrap().msat()
+            invoice_decoded.invoice_amount_msat.map(|a| a.msat())
         }
         cln_rpc::model::responses::DecodeType::BOLT11_INVOICE => {
-            invoice_decoded.amount_msat.unwrap().msat()
+            invoice_decoded.amount_msat.map(|a| a.msat())
         }
         _ => return Err(anyhow!("Wrong invoice type decoded!")),
+    };
+    let amount_msat = params
+        .get("amount_msat")
+        .and_then(serde_json::Value::as_u64);
+
+    let invoice_amt_msat = if let Some(i_a) = invoice_amt_msat {
+        i_a
+    } else if let Some(amt) = amount_msat {
+        amt
+    } else {
+        return Err(anyhow!("amountless invoice with no amount_msat passed"));
     };
 
     if maxfee.is_some() || maxfeepercent.is_some() || exemptfee.is_some() {

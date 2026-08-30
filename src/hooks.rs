@@ -73,15 +73,6 @@ pub async fn hook_handler(
         }
     }
 
-    if let Err(e) = handle_lno_message(paycmd, &config, &mut params_as_object) {
-        return Ok(json!({"return":{"error":json!(RpcError {
-            code: Some(-32602),
-            message: format!("payany: {e}"),
-            data: None,
-        })}}));
-    }
-    params_as_object.remove("message");
-
     if let Err(e) = resolve_offer_invoice(plugin.clone(), &config, &mut params_as_object).await
     {
         return Ok(json!({"return": {"error":json!(RpcError {
@@ -90,6 +81,15 @@ pub async fn hook_handler(
             data: None,
         })}}));
     }
+
+    if let Err(e) = handle_offer_message(paycmd, &config, &mut params_as_object) {
+        return Ok(json!({"return":{"error":json!(RpcError {
+            code: Some(-32602),
+            message: format!("payany: {e}"),
+            data: None,
+        })}}));
+    }
+    params_as_object.remove("message");
 
     if let Err(e) = budget_check(plugin.clone(), &params_as_object, paycmd).await {
         return Ok(json!({"return": {"error":json!(RpcError {
@@ -122,7 +122,7 @@ pub async fn hook_handler(
     Ok(result)
 }
 
-fn handle_lno_message(
+fn handle_offer_message(
     paycmd: Paycmd,
     config: &Config,
     params: &mut Map<String, serde_json::Value>,
@@ -131,7 +131,11 @@ fn handle_lno_message(
         .get("invstring")
         .or_else(|| params.get("bolt11"))
         .and_then(|v| v.as_str());
-    if invstring.is_none() || !invstring.unwrap().to_lowercase().starts_with("lno") {
+    let Some(invstring) = invstring else {
+        return Ok(());
+    };
+    let is_offer = invstring.to_lowercase().starts_with("lno") || invstring.contains('@');
+    if !is_offer {
         return Ok(());
     }
     if !params.contains_key("message") {

@@ -13,22 +13,28 @@ from util import get_plugin  # noqa: F401
 LOGGER = logging.getLogger(__name__)
 
 
-def test_payany_with_offer_and_bi353(node_factory, get_plugin):  # noqa: F811
-    opts = [
-        {
-            "plugin": get_plugin,
-            "payany-budget-per": "5 hours",
-            "payany-budget-amount-msat": 1000000,
-            "log-level": "debug",
-        },
-        {"log-level": "debug"},
-    ]
+def test_payany_with_offer_and_bi353(
+    node_factory,
+    lnurl_server,
+    pay_renepay_deprecated,
+    get_plugin,  # noqa: F811
+):
+    opts = {
+        "plugin": get_plugin,
+        "payany-budget-per": "5 hours",
+        "payany-budget-amount-msat": 1000000,
+        "log-level": "debug",
+    }
+    if pay_renepay_deprecated:
+        opts["allow-deprecated-apis"] = True
 
-    l1, l2 = node_factory.line_graph(
-        2,
-        wait_for_announce=True,
-        opts=opts,
+    l1 = node_factory.get_node(
+        options=opts,
     )
+    l2 = lnurl_server["node"]
+    l1.fundchannel(l2, 1_000_000, wait_for_active=True)
+
+    address = f"payme@{lnurl_server['address']}"
 
     offer = l2.rpc.call("offer", {"amount": "any", "description": "testpayany"})
     result = l1.rpc.call(
@@ -44,14 +50,15 @@ def test_payany_with_offer_and_bi353(node_factory, get_plugin):  # noqa: F811
     result = l1.rpc.call(
         "payany",
         {
-            "invstring": "test@notalnurlserver.gz",
+            "invstring": address,
             "amount_msat": 2_000,
             "message": "test2",
         },
     )
-    assert result["invoice"] == "test@notalnurlserver.gz"
 
     l1.rpc.call("xpay", [offer["bolt12"], 3_000])
+
+    l1.rpc.call("pay", [f"payme@{lnurl_server['address']}", 1_001])
 
 
 def test_xpay_supercharged(node_factory, get_plugin, lnurl_server):  # noqa: F811
@@ -322,6 +329,14 @@ def test_handle_opt(node_factory, get_plugin):  # noqa: F811
         "Found activated `xpay-handle-pay`, `payany` deactivated it!"
     )
 
+    wait_for(
+        lambda: (
+            not l1.rpc.call("listconfigs", {"config": "xpay-handle-pay"})["configs"][
+                "xpay-handle-pay"
+            ]["value_bool"]
+        )
+    )
+
     conf = l1.rpc.call("listconfigs", {"config": "xpay-handle-pay"})
     assert conf["configs"]["xpay-handle-pay"]["value_bool"] is False
 
@@ -568,13 +583,17 @@ def test_setconfig_bad_params(node_factory, get_plugin):  # noqa: F811
     assert res["invoice"] == "lno1qwerty"
 
 
-def test_budget_amountless_invoice(node_factory, get_plugin):  # noqa: F811
+def test_budget_amountless_invoice(node_factory, pay_renepay_deprecated, get_plugin):  # noqa: F811
     opts = {
         "plugin": get_plugin,
         "payany-budget-per": "5 hours",
         "payany-budget-amount-msat": 1000000,
+        "payany-xpay-handle-pay": True,
         "log-level": "debug",
     }
+
+    if pay_renepay_deprecated:
+        opts["allow-deprecated-apis"] = True
 
     l1 = node_factory.get_node(options=opts)
 
@@ -586,6 +605,12 @@ def test_budget_amountless_invoice(node_factory, get_plugin):  # noqa: F811
 
     res = l1.rpc.call("payany", ["lno1qwerty", 1000])
     assert res["invoice"] == "lno1qwerty"
+
+    invoice = l1.rpc.call("invoice", ["any", "amountless2", "amountless2"])
+
+    res = l1.rpc.call("pay", {"bolt11": invoice["bolt11"], "amount_msat": 1000})
+    assert "timeout" not in res, f"no response for amountless invoice: {res}"
+    assert not l1.daemon.is_in_log("panicked at")
 
 
 def test_bad_obj_param(node_factory, get_plugin):  # noqa: F811
