@@ -53,19 +53,34 @@ pub async fn budget_check(
     let invoice = match paycmd {
         Paycmd::Pay => params
             .get(config.payargs.first().unwrap())
-            .unwrap()
+            .ok_or_else(|| {
+                anyhow!(
+                    "first parameter `{}` for `pay` not found",
+                    config.payargs.first().unwrap()
+                )
+            })?
             .as_str()
             .unwrap()
             .to_owned(),
         Paycmd::Xpay => params
             .get(config.xpayargs.first().unwrap())
-            .unwrap()
+            .ok_or_else(|| {
+                anyhow!(
+                    "first parameter `{}` for `xpay` not found",
+                    config.xpayargs.first().unwrap()
+                )
+            })?
             .as_str()
             .unwrap()
             .to_owned(),
         Paycmd::Renepay => params
             .get(config.renepayargs.first().unwrap())
-            .unwrap()
+            .ok_or_else(|| {
+                anyhow!(
+                    "first paramteer `{}` for `renepay` not found",
+                    config.renepayargs.first().unwrap()
+                )
+            })?
             .as_str()
             .unwrap()
             .to_owned(),
@@ -73,19 +88,29 @@ pub async fn budget_check(
     let invoice_decoded = rpc.call_typed(&DecodeRequest { string: invoice }).await?;
     let (invoice_amt_msat, payment_hash) = match invoice_decoded.item_type {
         cln_rpc::model::responses::DecodeType::BOLT12_INVOICE => (
-            invoice_decoded.invoice_amount_msat.unwrap().msat(),
+            invoice_decoded.invoice_amount_msat.map(|a| a.msat()),
             invoice_decoded
                 .invoice_payment_hash
                 .ok_or_else(|| anyhow!("No payment_hash in decoded invoice!"))?,
         ),
         cln_rpc::model::responses::DecodeType::BOLT11_INVOICE => (
-            invoice_decoded.amount_msat.unwrap().msat(),
+            invoice_decoded.amount_msat.map(|a| a.msat()),
             invoice_decoded
                 .payment_hash
                 .ok_or_else(|| anyhow!("No payment_hash in decoded invoice!"))?
                 .to_string(),
         ),
         _ => return Err(anyhow!("Wrong invoice type decoded!")),
+    };
+
+    let invoice_amt_msat = if let Some(inv_amt) = invoice_amt_msat {
+        inv_amt
+    } else {
+        params
+            .get("amount_msat")
+            .ok_or_else(|| anyhow!("amountless invoice with no amount_msat given"))?
+            .as_u64()
+            .ok_or_else(|| anyhow!("amount_msat is not an integer"))?
     };
 
     let mut reserved: HashMap<String, (u64, Instant)> = {

@@ -112,6 +112,52 @@ impl ParamValue {
                 }
             },
         }
+
+        for param in params.keys() {
+            match paycmd {
+                Paycmd::Pay => {
+                    if !config.payargs.contains(param) && param != "bolt11" {
+                        return Err(anyhow!("unknown `pay` param: {param}"));
+                    }
+                }
+                Paycmd::Xpay => {
+                    if !config.xpayargs.contains(param) {
+                        return Err(anyhow!("unknown `xpay` param: {param}"));
+                    }
+                }
+                Paycmd::Renepay => {
+                    if !config.renepayargs.contains(param) {
+                        return Err(anyhow!("unknown `renepay` param: {param}"));
+                    }
+                }
+            }
+        }
+
+        match paycmd {
+            Paycmd::Pay => {
+                if !params.contains_key("invstring") && !params.contains_key("bolt11") {
+                    return Err(anyhow!(
+                        "missing required parameter for `pay`: `invstring`/`bolt11`"
+                    ));
+                }
+            }
+            Paycmd::Xpay => {
+                if !params.contains_key(&config.xpayargs[0]) {
+                    return Err(anyhow!(
+                        "missing required parameter for `xpay`: {}",
+                        config.xpayargs[0]
+                    ));
+                }
+            }
+            Paycmd::Renepay => {
+                if !params.contains_key(&config.renepayargs[0]) {
+                    return Err(anyhow!(
+                        "missing required parameter for `renepay`: {}",
+                        config.renepayargs[0]
+                    ));
+                }
+            }
+        }
         Ok(params)
     }
 }
