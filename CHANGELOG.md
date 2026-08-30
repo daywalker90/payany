@@ -4,6 +4,7 @@
 
 ### Fixed
 - budget: concurrent ``pay``/``xpay``/``renepay`` could race each other and exceed the budget, budget checks are now serialized and payments that passed the check are accounted for until they either show up in ``listsendpays`` or 10 seconds have passed
+- lnurl: the ``message`` argument is percent-encoded before it is added to the callback URL. This change prevents special characters from changing the URL parameters.
 
 ## [0.3.2] 2026-06-09
 

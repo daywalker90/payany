@@ -1,4 +1,4 @@
-use std::{fmt::Write as _, path::Path, time::Duration};
+use std::{path::Path, time::Duration};
 
 use anyhow::{Context, Error, anyhow};
 use cln_plugin::Plugin;
@@ -50,19 +50,23 @@ pub async fn try_fetch_lnurl(
 
     validate_lnurl_config(&lnurlp_config, amount_msat, lnaddress, config.strict_lnurl)?;
 
-    let mut callback_url = format!("{}?amount={}", lnurlp_config.callback, amount_msat.msat());
-    if let Some(msg) = message {
-        let comment_length = lnurlp_config
-            .comment_allowed
-            .ok_or_else(|| anyhow!("LNURL: message not supported for this address!"))?;
-        if comment_length >= (msg.len() as u64) {
-            write!(callback_url, "&comment={msg}")?;
-        } else {
-            return Err(anyhow!(
-                "LNURL: message too long for this address! {}>{}",
-                msg.len(),
-                comment_length
-            ));
+    let mut callback_url = reqwest::Url::parse(&lnurlp_config.callback)?;
+    {
+        let mut query_pairs = callback_url.query_pairs_mut();
+        query_pairs.append_pair("amount", &amount_msat.msat().to_string());
+        if let Some(msg) = message {
+            let comment_length = lnurlp_config
+                .comment_allowed
+                .ok_or_else(|| anyhow!("LNURL: message not supported for this address!"))?;
+            if comment_length >= (msg.len() as u64) {
+                query_pairs.append_pair("comment", &msg);
+            } else {
+                return Err(anyhow!(
+                    "LNURL: message too long for this address! {}>{}",
+                    msg.len(),
+                    comment_length
+                ));
+            }
         }
     }
     let callback_response_raw = client.get(callback_url).send().await?;
