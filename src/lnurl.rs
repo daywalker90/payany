@@ -7,6 +7,19 @@ use serde_json::Map;
 
 use crate::structs::{Config, LnurlpCallback, LnurlpConfig, PluginState};
 
+fn is_lud01_url(url: &reqwest::Url) -> bool {
+    let scheme = url.scheme();
+    if scheme == "https" {
+        return true;
+    }
+    if scheme != "http" {
+        return false;
+    }
+    let host = url.host_str().unwrap_or("");
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    host == "localhost" || host == "127.0.0.1" || host == "[::1]" || host.ends_with(".onion")
+}
+
 pub async fn try_fetch_lnurl(
     config: &Config,
     lnaddress: Option<&str>,
@@ -47,6 +60,12 @@ pub async fn try_fetch_lnurl(
     validate_lnurl_config(&lnurlp_config, amount_msat, lnaddress, config.strict_lnurl)?;
 
     let mut callback_url = reqwest::Url::parse(&lnurlp_config.callback)?;
+    if !is_lud01_url(&callback_url) {
+        return Err(anyhow!(
+            "LNURL callback must be an https:// clearnet link or an http:// onion link, got {}",
+            lnurlp_config.callback
+        ));
+    }
     {
         let mut query_pairs = callback_url.query_pairs_mut();
         query_pairs.append_pair("amount", &amount_msat.msat().to_string());
@@ -206,10 +225,40 @@ pub async fn resolve_lnurl(
     let config_url = String::from_utf8(config_url_bytes)?;
     log::debug!("lnurl hrp:{hrp} url:{config_url}");
 
+    let parsed = reqwest::Url::parse(&config_url)?;
+    if !is_lud01_url(&parsed) {
+        return Err(anyhow!(
+            "LNURL must be an https:// clearnet link or an http:// onion link, got {config_url}"
+        ));
+    }
+
     let config = plugin.state().config.lock().clone();
 
     let lnurlp_callback =
         try_fetch_lnurl(&config, lnaddress, config_url, amount_msat, message).await?;
 
     process_lnurl_invoice(plugin, invstring_name, lnurlp_callback, amount_msat, params).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_lud01_url;
+
+    #[test]
+    fn test_is_lud01_url() {
+        assert!(is_lud01_url(&"https://service.com/api?q=1".parse().unwrap()));
+        assert!(is_lud01_url(&"https://sub.example.org/x".parse().unwrap()));
+        assert!(is_lud01_url(&"http://abcdefghijklmnop.onion/x".parse().unwrap()));
+        assert!(is_lud01_url(&"http://abcdefghijklmnop.onion:8080/x".parse().unwrap()));
+        assert!(is_lud01_url(&"http://localhost:9737/x".parse().unwrap()));
+        assert!(is_lud01_url(&"http://localhost./x".parse().unwrap()));
+        assert!(is_lud01_url(&"http://127.0.0.1:8081/x".parse().unwrap()));
+        assert!(is_lud01_url(&"http://[::1]:8080/x".parse().unwrap()));
+        assert!(!is_lud01_url(&"http://service.com/x".parse().unwrap()));
+        assert!(!is_lud01_url(&"http://service.com.onion.evil.com/x".parse().unwrap()));
+        assert!(!is_lud01_url(&"http://notonion.com/x".parse().unwrap()));
+        assert!(!is_lud01_url(&"http://mylocalhost.com/x".parse().unwrap()));
+        assert!(!is_lud01_url(&"http://127.0.0.1.evil.com/x".parse().unwrap()));
+        assert!(!is_lud01_url(&"ftp://service.com/x".parse().unwrap()));
+    }
 }
