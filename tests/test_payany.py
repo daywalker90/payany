@@ -573,3 +573,25 @@ def test_bad_obj_param(node_factory, get_plugin):  # noqa: F811
 
     with pytest.raises(RpcError, match="unknown `xpay` param: bolt11"):
         l1.rpc.call("xpay", {"bolt11": "lno1qwerty"})
+
+
+def test_budget_time_period(node_factory, get_plugin):  # noqa: F811
+    l1 = node_factory.get_node(
+        options={"plugin": get_plugin, "log-level": "debug"},
+    )
+
+    with pytest.raises(RpcError):
+        l1.rpc.call("setconfig", ["payany-budget-per", "garbage1week"])
+
+    with pytest.raises(RpcError):
+        l1.rpc.call("setconfig", ["payany-budget-per", "1week extra"])
+
+    with pytest.raises(RpcError):
+        l1.rpc.call("setconfig", ["payany-budget-per", "1.5h"])
+
+    with pytest.raises(RpcError):
+        l1.rpc.call("setconfig", ["payany-budget-per", "18446744073709551615w"])
+
+    l1.rpc.call("setconfig", ["payany-budget-per", "18446744073709551615s"])
+
+    l1.rpc.call("setconfig", ["payany-budget-per", "5 hours"])
