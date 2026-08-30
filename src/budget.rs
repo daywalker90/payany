@@ -9,12 +9,15 @@ use chrono::Utc;
 use cln_plugin::Plugin;
 use cln_rpc::{
     ClnRpc,
-    model::requests::{
-        DecodeRequest,
-        GetinfoRequest,
-        ListsendpaysIndex,
-        ListsendpaysRequest,
-        ListsendpaysStatus,
+    model::{
+        requests::{
+            DecodeRequest,
+            GetinfoRequest,
+            ListsendpaysIndex,
+            ListsendpaysRequest,
+            ListsendpaysStatus,
+        },
+        responses::DecodeType,
     },
 };
 use serde_json::Map;
@@ -31,6 +34,13 @@ pub async fn budget_check(
     params: &Map<String, serde_json::Value>,
     paycmd: Paycmd,
 ) -> Result<(), anyhow::Error> {
+    let invstring_name = if params.get("invstring").is_some() {
+        "invstring"
+    } else if params.get("bolt11").is_some() {
+        "bolt11"
+    } else {
+        return Err(anyhow!("missing required parameter: `invstring`/`bolt11`"));
+    };
     let config = plugin.state().config.lock().clone();
     if config.budget_amount_msat.is_none() || config.budget_per.is_none() {
         return Ok(());
@@ -52,7 +62,7 @@ pub async fn budget_check(
 
     let invoice = match paycmd {
         Paycmd::Pay => params
-            .get(config.payargs.first().unwrap())
+            .get(invstring_name)
             .ok_or_else(|| {
                 anyhow!(
                     "first parameter `{}` for `pay` not found",
@@ -87,13 +97,13 @@ pub async fn budget_check(
     };
     let invoice_decoded = rpc.call_typed(&DecodeRequest { string: invoice }).await?;
     let (invoice_amt_msat, payment_hash) = match invoice_decoded.item_type {
-        cln_rpc::model::responses::DecodeType::BOLT12_INVOICE => (
+        DecodeType::BOLT12_INVOICE => (
             invoice_decoded.invoice_amount_msat.map(|a| a.msat()),
             invoice_decoded
                 .invoice_payment_hash
                 .ok_or_else(|| anyhow!("No payment_hash in decoded invoice!"))?,
         ),
-        cln_rpc::model::responses::DecodeType::BOLT11_INVOICE => (
+        DecodeType::BOLT11_INVOICE => (
             invoice_decoded.amount_msat.map(|a| a.msat()),
             invoice_decoded
                 .payment_hash
