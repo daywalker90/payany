@@ -76,9 +76,11 @@ async def lnurl_server(node_factory):
     PORT = node_factory.get_unused_port()
 
     BASE = f"http://{HOST}:{PORT}"
+    ADDRESS = f"{HOST}:{PORT}"
 
     async def pay_params(request):
-        callback = f"{BASE}/lnurl/callback?lnurlp=test"
+        user = request.match_info["user"]
+        callback = f"{BASE}/lnurl/callback?lnurlp={user}"
 
         return web.json_response(
             {
@@ -86,17 +88,23 @@ async def lnurl_server(node_factory):
                 "commentAllowed": 256,
                 "minSendable": 1000,
                 "maxSendable": 1_000_000,
-                "metadata": json.dumps([["text/plain", "pytest lnurl server"]]),
+                "metadata": json.dumps(
+                    [
+                        ["text/plain", "pytest lnurl server"],
+                        ["text/identifier", f"{user}@{ADDRESS}"],
+                    ]
+                ),
                 "tag": "payRequest",
             }
         )
 
     async def pay_callback(request):
         amount_msat = int(request.query["amount"])
+        user = request.query["lnurlp"]
 
         invoice_args = {
             "amount_msat": amount_msat,
-            "label": f"test-{amount_msat}",
+            "label": f"{user}-{amount_msat}",
         }
 
         comment = request.query.get("comment")
@@ -114,7 +122,7 @@ async def lnurl_server(node_factory):
             }
         )
 
-    app.router.add_get("/.well-known/lnurlp/test", pay_params)
+    app.router.add_get("/.well-known/lnurlp/{user}", pay_params)
     app.router.add_get("/lnurl/callback", pay_callback)
 
     thread = threading.Thread(
@@ -128,4 +136,4 @@ async def lnurl_server(node_factory):
 
     await asyncio.sleep(1)
 
-    yield {"lnurl": lnurl, "node": node, "base": BASE}
+    yield {"lnurl": lnurl, "node": node, "base": BASE, "address": ADDRESS}

@@ -5,7 +5,7 @@ use cln_plugin::Plugin;
 use cln_rpc::{
     ClnRpc,
     model::{
-        requests::{DecodeRequest, FetchinvoiceRequest},
+        requests::{DecodeRequest, Fetchbip353Request, FetchinvoiceRequest},
         responses::DecodeType,
     },
     primitives::Amount,
@@ -113,7 +113,7 @@ pub async fn resolve_offer_invoice(
     let Some(invstring) = params.get(invstring_name).and_then(|v| v.as_str()) else {
         return Ok(());
     };
-    if !invstring.to_lowercase().starts_with("lno") {
+    if !invstring.to_lowercase().starts_with("lno") && !invstring.contains('@') {
         return Ok(());
     }
     if config.budget_amount_msat.is_none() || config.budget_per.is_none() {
@@ -125,6 +125,7 @@ pub async fn resolve_offer_invoice(
         .and_then(serde_json::Value::as_u64);
     let payer_note = params
         .get("payer_note")
+        .or_else(|| params.get("message"))
         .and_then(|v| v.as_str())
         .map(str::to_owned);
 
@@ -133,13 +134,28 @@ pub async fn resolve_offer_invoice(
     )
     .await?;
 
+    let offer_string = if invstring.to_lowercase().starts_with("lno") {
+        invstring.to_owned()
+    } else {
+        let bip353 = rpc
+            .call_typed(&Fetchbip353Request {
+                address: invstring.to_owned(),
+            })
+            .await?;
+        bip353
+            .instructions
+            .iter()
+            .find_map(|i| i.offer.clone())
+            .ok_or_else(|| anyhow!("bip353 response did not contain an offer"))?
+    };
+
     let offer_decoded = rpc
         .call_typed(&DecodeRequest {
-            string: invstring.to_owned(),
+            string: offer_string.clone(),
         })
         .await?;
     if offer_decoded.item_type != DecodeType::BOLT12_OFFER {
-        return Err(anyhow!("Not a bolt12 offer: {invstring}"));
+        return Err(anyhow!("Not a bolt12 offer: {offer_string}"));
     }
     if let Some(currency) = offer_decoded.offer_currency {
         return Err(anyhow!(
@@ -178,7 +194,7 @@ pub async fn resolve_offer_invoice(
             recurrence_label: None,
             recurrence_start: None,
             timeout: None,
-            offer: invstring.to_owned(),
+            offer: offer_string,
         })
         .await?;
 
@@ -204,9 +220,9 @@ pub async fn resolve_offer_invoice(
     }
 
     params.insert(invstring_name.to_owned(), json!(fetched.invoice));
-    // The fetched invoice already carries its amount, and xpay rejects an
-    // `amount_msat` on an amountful bolt12 invoice.
     params.remove("amount_msat");
+    params.remove("payer_note");
+    params.remove("message");
     log::debug!("fetched bolt12 invoice for offer");
     Ok(())
 }
