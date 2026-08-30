@@ -111,7 +111,7 @@ fn check_setconfig(param_val: ParamValue) -> Result<(), anyhow::Error> {
     match param_val {
         ParamValue::Array(values) => {
             if let Some(f) = values.first() {
-                config = Some(f.as_str().unwrap().to_owned());
+                config = Some(f.as_str().map(std::borrow::ToOwned::to_owned)).flatten();
             } else {
                 return Ok(());
             }
@@ -122,7 +122,9 @@ fn check_setconfig(param_val: ParamValue) -> Result<(), anyhow::Error> {
             }
         }
         ParamValue::Object(map) => {
-            config = map.get("config").map(|s| s.as_str().unwrap().to_owned());
+            config = map
+                .get("config")
+                .and_then(|s| s.as_str().map(std::borrow::ToOwned::to_owned));
             val = map.get("val").cloned();
         }
         ParamValue::String(s) => config = Some(s),

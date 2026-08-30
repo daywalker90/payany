@@ -14,6 +14,9 @@ pub async fn payany(
     if let Some(args_obj) = args.as_object() {
         params.clone_from(args_obj);
     } else if let Some(args_arr) = args.as_array() {
+        if args_arr.len() > PAYANYARGS.len() {
+            return Err(anyhow!("too many arguments given"));
+        }
         for (i, arg) in args_arr.iter().enumerate() {
             params.insert(PAYANYARGS[i].to_owned(), arg.clone());
         }

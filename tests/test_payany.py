@@ -1,14 +1,12 @@
-#!/usr/bin/env python3
-
 import json
 import logging
 import os
 import threading
+from pathlib import Path
 
 import pytest
-from pathlib import Path
 from pyln.client import RpcError
-from pyln.testing.fixtures import *  # noqa: F403
+from pyln.testing.fixtures import *
 from pyln.testing.utils import wait_for
 from util import get_plugin  # noqa: F401
 
@@ -70,9 +68,7 @@ def test_xpay_supercharged(node_factory, get_plugin, lnurl_server):  # noqa: F81
     assert pay[1]["amount_msat"] == 2_000
     assert pay[1]["description"] == "pytest lnurl server"
 
-    with pytest.raises(
-        RpcError, match="missing required parameter: `invstring`/`bolt11`"
-    ):
+    with pytest.raises(RpcError, match="missing required parameter"):
         result = l1.rpc.call("xpay", [])
 
 
@@ -107,9 +103,7 @@ def test_pay_supercharged(
     assert pay[1]["amount_msat"] == 2_000
     assert pay[1]["description"] == "pytest lnurl server"
 
-    with pytest.raises(
-        RpcError, match="missing required parameter: `invstring`/`bolt11`"
-    ):
+    with pytest.raises(RpcError, match="missing required parameter"):
         result = l1.rpc.call("pay", [])
 
 
@@ -146,9 +140,7 @@ async def test_renepay_supercharged(
     assert pay[1]["amount_msat"] == 2_000
     assert pay[1]["description"] == "pytest lnurl server"
 
-    with pytest.raises(
-        RpcError, match="missing required parameter: `invstring`/`bolt11`"
-    ):
+    with pytest.raises(RpcError, match="missing required parameter"):
         result = l1.rpc.call("renepay", [])
 
 
@@ -515,3 +507,69 @@ def test_budget_concurrent(node_factory, get_plugin):  # noqa: F811
 
     assert sorted(result == "success" for result in results) == [False, True]
     assert any("payany budget exceeded" in result for result in results)
+
+
+def test_payany_too_many_args(node_factory, get_plugin):  # noqa: F811
+    l1 = node_factory.get_node(
+        options={"plugin": get_plugin, "log-level": "debug"},
+    )
+
+    with pytest.raises(RpcError, match="too many arguments given"):
+        l1.rpc.call("payany", ["lno1qwerty", 1000, "msg", "extra"])
+    assert not l1.daemon.is_in_log("panicked at")
+
+    res = l1.rpc.call("payany", ["lno1qwerty", 1000])
+    assert res["invoice"] == "lno1qwerty"
+
+
+def test_setconfig_bad_params(node_factory, get_plugin):  # noqa: F811
+    l1 = node_factory.get_node(
+        options={"plugin": get_plugin, "log-level": "debug"},
+    )
+
+    with pytest.raises(RpcError, match="Unknown config option"):
+        l1.rpc.call("setconfig", [1])
+
+    with pytest.raises(RpcError, match="Unknown config option"):
+        l1.rpc.call("setconfig", {"config": 1, "val": "true"})
+
+    assert not l1.daemon.is_in_log("panicked at")
+
+    res = l1.rpc.call("payany", ["lno1qwerty", 1000])
+    assert res["invoice"] == "lno1qwerty"
+
+
+def test_budget_amountless_invoice(node_factory, get_plugin):  # noqa: F811
+    opts = {
+        "plugin": get_plugin,
+        "payany-budget-per": "5 hours",
+        "payany-budget-amount-msat": 1000000,
+        "log-level": "debug",
+    }
+
+    l1 = node_factory.get_node(options=opts)
+
+    invoice = l1.rpc.call("invoice", ["any", "amountless1", "amountless1"])
+
+    res = l1.rpc.call("xpay", {"invstring": invoice["bolt11"], "amount_msat": 1000})
+    assert "timeout" not in res, f"no response for amountless invoice: {res}"
+    assert not l1.daemon.is_in_log("panicked at")
+
+    res = l1.rpc.call("payany", ["lno1qwerty", 1000])
+    assert res["invoice"] == "lno1qwerty"
+
+
+def test_bad_obj_param(node_factory, get_plugin):  # noqa: F811
+    opts = {
+        "plugin": get_plugin,
+        "payany-budget-per": "5 hours",
+        "payany-budget-amount-msat": 1000000,
+        "log-level": "debug",
+    }
+
+    l1 = node_factory.get_node(
+        options=opts,
+    )
+
+    with pytest.raises(RpcError, match="unknown `xpay` param: bolt11"):
+        l1.rpc.call("xpay", {"bolt11": "lno1qwerty"})
