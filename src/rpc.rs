@@ -21,6 +21,9 @@ pub async fn payany(
             params.insert(PAYANYARGS[i].to_owned(), arg.clone());
         }
     }
+    if !params.contains_key(PAYANYARGS[0]) {
+        return Err(anyhow!("missing `invstring`"));
+    }
     match resolve_invstring(plugin, &mut params).await {
         Ok(o) => o,
         Err(e) => {
