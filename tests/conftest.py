@@ -78,7 +78,7 @@ async def lnurl_server(node_factory):
     BASE = f"http://{HOST}:{PORT}"
 
     async def pay_params(request):
-        callback = f"{BASE}/lnurl/callback"
+        callback = f"{BASE}/lnurl/callback?lnurlp=test"
 
         return web.json_response(
             {
