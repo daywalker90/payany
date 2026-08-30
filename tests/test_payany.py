@@ -624,3 +624,38 @@ def test_budget_time_period(node_factory, get_plugin):  # noqa: F811
     l1.rpc.call("setconfig", ["payany-budget-per", "18446744073709551615s"])
 
     l1.rpc.call("setconfig", ["payany-budget-per", "5 hours"])
+
+
+def test_budget_bare_offer(node_factory, get_plugin):  # noqa: F811
+    opts = [
+        {
+            "plugin": get_plugin,
+            "payany-budget-per": "5 hours",
+            "payany-budget-amount-msat": 1000000,
+            "log-level": "debug",
+        },
+        {"log-level": "debug"},
+    ]
+
+    l1, l2 = node_factory.line_graph(
+        2,
+        wait_for_announce=True,
+        opts=opts,
+    )
+
+    offer = l2.rpc.call("offer", {"amount": 1000, "description": "testpayany"})
+    res = l1.rpc.call("xpay", {"invstring": offer["bolt12"]})
+    assert res["amount_msat"] == 1000
+
+    res = l1.rpc.call("xpay", {"invstring": offer["bolt12"], "amount_msat": 1200})
+    assert res["amount_msat"] == 1200
+
+    with pytest.raises(RpcError, match="amount_msat must be at least"):
+        l1.rpc.call("xpay", {"invstring": offer["bolt12"], "amount_msat": 500})
+
+    offer2 = l2.rpc.call("offer", {"amount": "any", "description": "testpayany2"})
+    with pytest.raises(RpcError, match="Must specify amount"):
+        l1.rpc.call("xpay", {"invstring": offer2["bolt12"]})
+
+    res = l1.rpc.call("xpay", {"invstring": offer2["bolt12"], "amount_msat": 2000})
+    assert res["amount_msat"] == 2000
