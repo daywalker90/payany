@@ -2,11 +2,7 @@ use std::{path::Path, time::Duration};
 
 use anyhow::{Context, Error, anyhow};
 use cln_plugin::Plugin;
-use cln_rpc::{
-    ClnRpc,
-    model::requests::DecodeRequest,
-    primitives::{Amount, Sha256},
-};
+use cln_rpc::{ClnRpc, model::requests::DecodeRequest, primitives::Amount};
 use serde_json::Map;
 
 use crate::structs::{Config, LnurlpCallback, LnurlpConfig, PluginState};
@@ -17,7 +13,7 @@ pub async fn try_fetch_lnurl(
     config_url: String,
     amount_msat: Amount,
     message: Option<String>,
-) -> Result<(LnurlpCallback, LnurlpConfig), Error> {
+) -> Result<LnurlpCallback, Error> {
     let client = if let Some(tp) = &config.tor_proxy {
         let proxy = reqwest::Proxy::all(format!("socks5h://{tp}"))?;
         reqwest::Client::builder()
@@ -32,7 +28,7 @@ pub async fn try_fetch_lnurl(
     let lnurlp_config_raw = match client.get(config_url).send().await {
         Ok(o) => o,
         Err(e) => {
-            log::warn!("LNURL: failed to fetch lnurl config: {:?}", e);
+            log::warn!("LNURL: failed to fetch lnurl config: {e:?}");
             return Err(anyhow!(e));
         }
     };
@@ -58,12 +54,12 @@ pub async fn try_fetch_lnurl(
             let comment_length = lnurlp_config
                 .comment_allowed
                 .ok_or_else(|| anyhow!("LNURL: message not supported for this address!"))?;
-            if comment_length >= (msg.len() as u64) {
+            if comment_length >= msg.chars().count() as u64 {
                 query_pairs.append_pair("comment", &msg);
             } else {
                 return Err(anyhow!(
                     "LNURL: message too long for this address! {}>{}",
-                    msg.len(),
+                    msg.chars().count(),
                     comment_length
                 ));
             }
@@ -77,16 +73,14 @@ pub async fn try_fetch_lnurl(
         ));
     }
     let callback_response = callback_response_raw.json::<LnurlpCallback>().await?;
-    Ok((callback_response, lnurlp_config))
+    Ok(callback_response)
 }
 
 pub async fn process_lnurl_invoice(
     plugin: Plugin<PluginState>,
     invstring_name: &str,
     callback_response: LnurlpCallback,
-    lnurlp_config: LnurlpConfig,
     amount_msat: Amount,
-    config: &Config,
     params: &mut Map<String, serde_json::Value>,
 ) -> Result<(), Error> {
     let mut rpc = ClnRpc::new(
@@ -107,30 +101,6 @@ pub async fn process_lnurl_invoice(
             amount_msat.msat()
         ));
     }
-    if invoice_decoded.description_hash.is_none() {
-        if config.strict_lnurl {
-            return Err(anyhow!("Strict mode: Lnurl: missing description hash!"));
-        }
-        // Some servers are not including a description hash
-        log::info!(
-            "Lnurl: missing description hash, please report to lnaddress \
-            service provider they are violating the spec in LUD-06"
-        );
-    } else {
-        let metadata_hashed = Sha256::const_hash(lnurlp_config.metadata.as_bytes());
-        log::debug!(
-            "Lnurl: metadata_hashed:{} description_hash:{}",
-            metadata_hashed,
-            invoice_decoded.description_hash.unwrap()
-        );
-        if invoice_decoded.description_hash.unwrap() != metadata_hashed {
-            return Err(anyhow!(
-                "Lnurl: description hash not matching metadata! {} != {}",
-                metadata_hashed,
-                invoice_decoded.description_hash.unwrap()
-            ));
-        }
-    }
 
     params.remove("amount_msat");
     *params.get_mut(invstring_name).unwrap() = serde_json::Value::String(callback_response.pr);
@@ -147,6 +117,14 @@ fn validate_lnurl_config(
         return Err(anyhow!(
             "LNURL config is not for a payRequest: {}",
             lnurl_config.tag
+        ));
+    }
+
+    if lnurl_config.min_sendable > lnurl_config.max_sendable {
+        return Err(anyhow!(
+            "minSendable {} cannot be more than maxSendable {}",
+            lnurl_config.min_sendable,
+            lnurl_config.max_sendable
         ));
     }
 
@@ -173,30 +151,27 @@ fn validate_lnurl_config(
 
         for meta in metadata_outer_array {
             let serde_json::Value::Array(metadata_inner_array) = meta else {
-                return Err(anyhow!("inner metadata not an array!: {}", &meta));
+                return Err(anyhow!("inner metadata not an array!: {meta}"));
             };
-            if metadata_inner_array.len() != 2 {
-                return Err(anyhow!(
-                    "inner metadata array is not of length 2!: {metadata_inner_array:?}"
-                ));
-            }
-            let data_type = metadata_inner_array
-                .first()
-                .unwrap()
+            let mut inner = metadata_inner_array.into_iter();
+            let data_type = inner
+                .next()
+                .ok_or(anyhow!("inner metadata array is empty!"))?
                 .as_str()
-                .ok_or(anyhow!("inner metadata identifier is not a string:"))?;
-            if !data_type.eq_ignore_ascii_case("text/identifier")
-                && !data_type.eq_ignore_ascii_case("text/email")
+                .ok_or(anyhow!("inner metadata identifier is not a string:"))?
+                .to_owned();
+            let data = inner
+                .next()
+                .ok_or(anyhow!("inner metadata array has no data!"))?;
+            if data_type.eq_ignore_ascii_case("text/identifier")
+                || data_type.eq_ignore_ascii_case("text/email")
             {
-                continue;
-            }
-            let data = metadata_inner_array
-                .get(1)
-                .unwrap()
-                .as_str()
-                .ok_or(anyhow!("inner metadata content is not a string:"))?;
-            if data.eq_ignore_ascii_case(lnaddr) {
-                lnaddress_found = true;
+                let data = data
+                    .as_str()
+                    .ok_or(anyhow!("inner metadata content is not a string:"))?;
+                if data.eq_ignore_ascii_case(lnaddr) {
+                    lnaddress_found = true;
+                }
             }
         }
 
@@ -233,17 +208,8 @@ pub async fn resolve_lnurl(
 
     let config = plugin.state().config.lock().clone();
 
-    let (lnurlp_callback, lnurlp_config) =
+    let lnurlp_callback =
         try_fetch_lnurl(&config, lnaddress, config_url, amount_msat, message).await?;
 
-    process_lnurl_invoice(
-        plugin,
-        invstring_name,
-        lnurlp_callback,
-        lnurlp_config,
-        amount_msat,
-        &config,
-        params,
-    )
-    .await
+    process_lnurl_invoice(plugin, invstring_name, lnurlp_callback, amount_msat, params).await
 }
