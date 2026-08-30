@@ -5,6 +5,7 @@
 ### Fixed
 - budget: concurrent ``pay``/``xpay``/``renepay`` could race each other and exceed the budget, budget checks are now serialized and payments that passed the check are accounted for until they either show up in ``listsendpays`` or 10 seconds have passed
 - lnurl: the ``message`` argument is percent-encoded before it is added to the callback URL. This change prevents special characters from changing the URL parameters.
+- lnaddress: only exact ``localhost``/``127.0.0.1``/``[::1]`` hosts are fetched via ``http``, any other domain that merely contains them (e.g. ``mylocalhost.com``) is fetched via ``https``. ``.onion`` addresses are fetched via ``http`` so they work when CLN is configured to use tor.
 
 ## [0.3.2] 2026-06-09
 

@@ -89,6 +89,30 @@ pub async fn resolve_invstring(
     Ok(())
 }
 
+fn lnurlp_base_url(domain: &str, user: &str) -> String {
+    let host = if let Some(rest) = domain.strip_prefix('[') {
+        match rest.find(']') {
+            Some(end) => &domain[..end + 2],
+            None => domain,
+        }
+    } else {
+        domain.split(':').next().unwrap_or(domain)
+    };
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+
+    let scheme = if host == "localhost"
+        || host == "127.0.0.1"
+        || host == "[::1]"
+        || host.ends_with(".onion")
+    {
+        "http"
+    } else {
+        "https"
+    };
+
+    format!("{scheme}://{domain}/.well-known/lnurlp/{user}")
+}
+
 async fn resolve_lnaddress(
     plugin: Plugin<PluginState>,
     invstring_name: &str,
@@ -107,11 +131,7 @@ async fn resolve_lnaddress(
 
     let domain = address_parts.get(1).unwrap();
 
-    let ln_service_url = if domain.contains("localhost") || domain.contains("127.0.0.1") {
-        format!("http://{domain}/.well-known/lnurlp/{user}")
-    } else {
-        format!("https://{domain}/.well-known/lnurlp/{user}")
-    };
+    let ln_service_url = lnurlp_base_url(domain, user);
 
     let config = plugin.state().config.lock().clone();
 
@@ -144,5 +164,74 @@ async fn resolve_lnaddress(
     {
         Ok(lnurl) => Ok(lnurl),
         Err(lnurl_error) => Err(anyhow!("Error fetching invoice from lnurl: {lnurl_error}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::lnurlp_base_url;
+
+    #[test]
+    fn test_local_hosts_use_http() {
+        assert_eq!(
+            lnurlp_base_url("localhost", "user"),
+            "http://localhost/.well-known/lnurlp/user"
+        );
+        assert_eq!(
+            lnurlp_base_url("localhost:9737", "user"),
+            "http://localhost:9737/.well-known/lnurlp/user"
+        );
+        assert_eq!(
+            lnurlp_base_url("127.0.0.1", "user"),
+            "http://127.0.0.1/.well-known/lnurlp/user"
+        );
+        assert_eq!(
+            lnurlp_base_url("127.0.0.1:8081", "user"),
+            "http://127.0.0.1:8081/.well-known/lnurlp/user"
+        );
+        assert_eq!(
+            lnurlp_base_url("[::1]:8080", "user"),
+            "http://[::1]:8080/.well-known/lnurlp/user"
+        );
+        assert_eq!(
+            lnurlp_base_url("LOCALHOST.", "user"),
+            "http://LOCALHOST./.well-known/lnurlp/user"
+        );
+    }
+
+    #[test]
+    fn test_lookalike_hosts_use_https() {
+        assert_eq!(
+            lnurlp_base_url("mylocalhost.com", "user"),
+            "https://mylocalhost.com/.well-known/lnurlp/user"
+        );
+        assert_eq!(
+            lnurlp_base_url("localhost.com", "user"),
+            "https://localhost.com/.well-known/lnurlp/user"
+        );
+        assert_eq!(
+            lnurlp_base_url("127.0.0.1.evil.com", "user"),
+            "https://127.0.0.1.evil.com/.well-known/lnurlp/user"
+        );
+        assert_eq!(
+            lnurlp_base_url("2127.0.0.1", "user"),
+            "https://2127.0.0.1/.well-known/lnurlp/user"
+        );
+    }
+
+    #[test]
+    fn test_onion_hosts_use_http() {
+        assert_eq!(
+            lnurlp_base_url("abcdefghijklmnop.onion", "user"),
+            "http://abcdefghijklmnop.onion/.well-known/lnurlp/user"
+        );
+        assert_eq!(
+            lnurlp_base_url("abcdefghijklmnop.onion:8080", "user"),
+            "http://abcdefghijklmnop.onion:8080/.well-known/lnurlp/user"
+        );
+        assert_eq!(
+            lnurlp_base_url("notonion.com", "user"),
+            "https://notonion.com/.well-known/lnurlp/user"
+        );
     }
 }
