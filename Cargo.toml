@@ -40,7 +40,7 @@ chrono = "0.4"
 parking_lot = "0.12"
 
 [dependencies.tokio]
-features = ["fs", "net"]
+features = ["fs", "net", "sync"]
 version = "1"
 
 [profile.optimized]

@@ -1,4 +1,8 @@
-use std::{path::Path, time::Instant};
+use std::{
+    collections::HashMap,
+    path::Path,
+    time::{Duration, Instant},
+};
 
 use anyhow::anyhow;
 use chrono::Utc;
@@ -20,6 +24,8 @@ use crate::{
     structs::{Paycmd, PluginState},
 };
 
+const RESERVATION_EXPIRY: Duration = Duration::from_secs(10);
+
 pub async fn budget_check(
     plugin: Plugin<PluginState>,
     params: &Map<String, serde_json::Value>,
@@ -29,6 +35,7 @@ pub async fn budget_check(
     if config.budget_amount_msat.is_none() || config.budget_per.is_none() {
         return Ok(());
     }
+    let _budget_lock = plugin.state().budget_lock.lock().await;
     let now = Instant::now();
     let budget_amount_msat = config.budget_amount_msat.unwrap().msat();
     let budget_per = config.budget_per.unwrap();
@@ -64,15 +71,29 @@ pub async fn budget_check(
             .to_owned(),
     };
     let invoice_decoded = rpc.call_typed(&DecodeRequest { string: invoice }).await?;
-    let invoice_amt_msat = match invoice_decoded.item_type {
-        cln_rpc::model::responses::DecodeType::BOLT12_INVOICE => {
-            invoice_decoded.invoice_amount_msat.unwrap().msat()
-        }
-        cln_rpc::model::responses::DecodeType::BOLT11_INVOICE => {
-            invoice_decoded.amount_msat.unwrap().msat()
-        }
+    let (invoice_amt_msat, payment_hash) = match invoice_decoded.item_type {
+        cln_rpc::model::responses::DecodeType::BOLT12_INVOICE => (
+            invoice_decoded.invoice_amount_msat.unwrap().msat(),
+            invoice_decoded
+                .invoice_payment_hash
+                .ok_or_else(|| anyhow!("No payment_hash in decoded invoice!"))?,
+        ),
+        cln_rpc::model::responses::DecodeType::BOLT11_INVOICE => (
+            invoice_decoded.amount_msat.unwrap().msat(),
+            invoice_decoded
+                .payment_hash
+                .ok_or_else(|| anyhow!("No payment_hash in decoded invoice!"))?
+                .to_string(),
+        ),
         _ => return Err(anyhow!("Wrong invoice type decoded!")),
     };
+
+    let mut reserved: HashMap<String, (u64, Instant)> = {
+        let mut budget_reserved = plugin.state().budget_reserved.lock();
+        budget_reserved.retain(|_, (_, approved_at)| approved_at.elapsed() < RESERVATION_EXPIRY);
+        budget_reserved.clone()
+    };
+    reserved.remove(&payment_hash);
 
     let getinfo = rpc.call_typed(&GetinfoRequest {}).await?;
 
@@ -84,7 +105,7 @@ pub async fn budget_check(
     )?;
 
     budget_amount_msat_used += invoice_amt_msat;
-    budget_amount_msat_used += maxfee;
+    budget_amount_msat_used = budget_amount_msat_used.saturating_add(maxfee);
 
     if budget_amount_msat_used > budget_amount_msat {
         return Err(anyhow!(
@@ -92,8 +113,7 @@ pub async fn budget_check(
         ));
     }
 
-    #[allow(clippy::clone_on_copy)]
-    let old_index = plugin.state().pay_index.lock().clone();
+    let old_index = *plugin.state().pay_index.lock();
 
     let pending_pays = rpc
         .call_typed(&ListsendpaysRequest {
@@ -119,6 +139,7 @@ pub async fn budget_check(
         .payments;
 
     for pp in &pending_pays {
+        reserved.remove(&pp.payment_hash.to_string());
         if let Some(dest) = pp.destination {
             if dest == getinfo.id {
                 continue;
@@ -127,7 +148,8 @@ pub async fn budget_check(
         if pp.created_at < pending_deadline {
             continue;
         }
-        budget_amount_msat_used += pp.amount_sent_msat.msat();
+        budget_amount_msat_used =
+            budget_amount_msat_used.saturating_add(pp.amount_sent_msat.msat());
 
         if let Some(ci) = pay_created_index {
             if pp.created_index < ci {
@@ -139,6 +161,7 @@ pub async fn budget_check(
     }
 
     for cp in &completed_pays {
+        reserved.remove(&cp.payment_hash.to_string());
         if let Some(dest) = cp.destination {
             if dest == getinfo.id {
                 continue;
@@ -147,7 +170,8 @@ pub async fn budget_check(
         if cp.completed_at.unwrap() < time_window {
             continue;
         }
-        budget_amount_msat_used += cp.amount_sent_msat.msat();
+        budget_amount_msat_used =
+            budget_amount_msat_used.saturating_add(cp.amount_sent_msat.msat());
 
         if let Some(ci) = pay_created_index {
             if cp.created_index < ci {
@@ -156,6 +180,10 @@ pub async fn budget_check(
         } else {
             pay_created_index = Some(cp.created_index);
         }
+    }
+
+    for (amount, _) in reserved.values() {
+        budget_amount_msat_used = budget_amount_msat_used.saturating_add(*amount);
     }
 
     if let Some(index) = pay_created_index {
@@ -167,6 +195,12 @@ pub async fn budget_check(
             "Budget would be exceeded! {budget_amount_msat_used}msat / {budget_amount_msat}msat"
         ));
     }
+
+    plugin.state().budget_reserved.lock().insert(
+        payment_hash,
+        (invoice_amt_msat.saturating_add(maxfee), Instant::now()),
+    );
+
     log::info!(
         "Within budget! {}msat / {}msat (check took {}ms)",
         budget_amount_msat_used,

@@ -1,4 +1,4 @@
-use std::{str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::Instant};
 
 use anyhow::anyhow;
 use cln_rpc::primitives::Amount;
@@ -12,12 +12,16 @@ pub const URI_SCHEMES: [&str; 3] = ["lightning:", "lno:", "lnurl:"];
 pub struct PluginState {
     pub config: Arc<Mutex<Config>>,
     pub pay_index: Arc<Mutex<u64>>,
+    pub budget_lock: Arc<tokio::sync::Mutex<()>>,
+    pub budget_reserved: Arc<Mutex<HashMap<String, (u64, Instant)>>>,
 }
 impl Default for PluginState {
     fn default() -> PluginState {
         PluginState {
             config: Arc::new(Mutex::new(Config::default())),
             pay_index: Arc::new(Mutex::new(0)),
+            budget_lock: Arc::new(tokio::sync::Mutex::new(())),
+            budget_reserved: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
