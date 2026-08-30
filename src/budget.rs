@@ -40,7 +40,7 @@ pub async fn budget_check(
     let budget_amount_msat = config.budget_amount_msat.unwrap().msat();
     let budget_per = config.budget_per.unwrap();
     let now_stamp = Utc::now().timestamp() as u64;
-    let time_window = now_stamp - budget_per;
+    let time_window = now_stamp.saturating_sub(budget_per);
     let pending_deadline = now_stamp - 2_592_000;
     let mut budget_amount_msat_used = 0;
     let mut pay_created_index = None;

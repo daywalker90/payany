@@ -8,6 +8,7 @@
 - lnurl: callbacks that already contain query parameters are now supported, the ``amount`` and ``comment`` parameters are appended correctly instead of corrupting the URL.
 - bolt12 offers: the ``message`` argument is now forwarded as ``payer_note`` when the command supports it. Setting both ``message`` and ``payer_note`` returns an error. A ``message`` on a command without the ``payer_note`` argument returns an error that asks you to upgrade CLN.
 - lnaddress: only exact ``localhost``/``127.0.0.1``/``[::1]`` hosts are fetched via ``http``, any other domain that merely contains them (e.g. ``mylocalhost.com``) is fetched via ``https``. ``.onion`` addresses are fetched via ``http`` so they work when CLN is configured to use tor.
+- budget: ``payany-budget-per`` is now parsed strictly, values like ``garbage1week``, ``1week extra`` or ``1.5h`` are rejected instead of being silently accepted. The time period is checked for overflow and absurd values can no longer wrap around and disable the budget check.
 
 ## [0.3.2] 2026-06-09
 

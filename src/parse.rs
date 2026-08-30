@@ -28,25 +28,27 @@ use crate::{
 };
 
 fn parse_time_period(input: &str) -> Result<u64, anyhow::Error> {
-    let re = regex::Regex::new(r"(\d+)\s*([a-zA-Z]+)")?;
-    if let Some(caps) = re.captures(input) {
-        let value: u64 = caps[1].parse()?;
-        let unit = &caps[2].to_lowercase();
+    let re = regex::Regex::new(r"^\s*(\d+)\s*([a-zA-Z]+)\s*$")?;
+    let caps = re
+        .captures(input)
+        .ok_or_else(|| anyhow!("Invalid time format: {input}"))?;
+    let value: u64 = caps[1].parse()?;
+    let unit = caps[2].to_lowercase();
 
-        if let Ok(time_unit) = unit.parse() {
-            match time_unit {
-                TimeUnit::Second => Ok(value),
-                TimeUnit::Minute => Ok(value * 60),
-                TimeUnit::Hour => Ok(value * 60 * 60),
-                TimeUnit::Day => Ok(value * 60 * 60 * 24),
-                TimeUnit::Week => Ok(value * 60 * 60 * 24 * 7),
-            }
-        } else {
-            Err(anyhow!(format!("Unsupported time unit: {unit}")))
-        }
-    } else {
-        Err(anyhow!("Invalid time format: {input}"))
-    }
+    let time_unit: TimeUnit = unit
+        .parse()
+        .map_err(|_| anyhow!("Unsupported time unit: {unit}"))?;
+
+    let seconds_per_unit = match time_unit {
+        TimeUnit::Second => 1,
+        TimeUnit::Minute => 60,
+        TimeUnit::Hour => 60 * 60,
+        TimeUnit::Day => 60 * 60 * 24,
+        TimeUnit::Week => 60 * 60 * 24 * 7,
+    };
+    value
+        .checked_mul(seconds_per_unit)
+        .ok_or_else(|| anyhow!("Time period {input} is too large!"))
 }
 
 pub fn get_startup_options(
@@ -476,4 +478,19 @@ fn test_time_parse() {
     assert_eq!(result, 3_024_000);
     let result = parse_time_period("3    hours").unwrap();
     assert_eq!(result, 10800);
+}
+
+#[test]
+fn test_time_parse_invalid() {
+    assert!(parse_time_period("").is_err());
+    assert!(parse_time_period("5").is_err());
+    assert!(parse_time_period("garbage1week").is_err());
+    assert!(parse_time_period("1week garbage").is_err());
+    assert!(parse_time_period("1.5h").is_err());
+    assert!(parse_time_period("1lightyears").is_err());
+    assert!(parse_time_period("18446744073709551615w").is_err());
+    assert_eq!(
+        parse_time_period("18446744073709551615s").unwrap(),
+        u64::MAX
+    );
 }
