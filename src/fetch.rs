@@ -273,7 +273,7 @@ async fn resolve_lnaddress(
 
     let config = plugin.state().config.lock().clone();
 
-    let (lnurlp_callback, lnurlp_config) = match try_fetch_lnurl(
+    let lnurlp_callback = match try_fetch_lnurl(
         &config,
         Some(lnaddress),
         ln_service_url,
@@ -282,23 +282,14 @@ async fn resolve_lnaddress(
     )
     .await
     {
-        Ok((cb, cf)) => (cb, cf),
+        Ok(cb) => cb,
         Err(e) => {
             log::info!("Error fetching lnurlp config: {e}, trying bip353 instead...");
             return Ok(());
         }
     };
 
-    match process_lnurl_invoice(
-        plugin,
-        invstring_name,
-        lnurlp_callback,
-        lnurlp_config,
-        amount_msat,
-        &config,
-        params,
-    )
-    .await
+    match process_lnurl_invoice(plugin, invstring_name, lnurlp_callback, amount_msat, params).await
     {
         Ok(lnurl) => Ok(lnurl),
         Err(lnurl_error) => Err(anyhow!("Error fetching invoice from lnurl: {lnurl_error}")),

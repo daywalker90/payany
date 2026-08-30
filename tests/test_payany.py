@@ -511,6 +511,36 @@ def test_lnurl(node_factory, get_plugin):  # noqa: F811
         l1.rpc.call("xpay", {"invstring": f"fakeuser@{url}", "amount_msat": 2600})
 
 
+def test_lnurl_comment_charlen(node_factory, get_plugin, lnurl_server):  # noqa: F811
+    opts = {"plugin": get_plugin, "log-level": "debug"}
+
+    l1 = node_factory.get_node(options=opts)
+    l2 = lnurl_server["node"]
+    l1.fundchannel(l2, 1_000_000, wait_for_active=True)
+
+    lnurl = lnurl_server["lnurl"]
+
+    with pytest.raises(RpcError, match="message too long"):
+        l1.rpc.call(
+            "xpay",
+            {
+                "invstring": lnurl,
+                "amount_msat": 3_000,
+                "message": "x" * 257,
+            },
+        )
+
+    res = l1.rpc.call(
+        "xpay",
+        {
+            "invstring": lnurl,
+            "amount_msat": 3_000,
+            "message": "ä" * 256,
+        },
+    )
+    assert res["amount_msat"] == 3_000
+
+
 def test_budget_concurrent(node_factory, get_plugin):  # noqa: F811
     opts = [
         {

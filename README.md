@@ -128,7 +128,7 @@ Example if you want your node to only be able to spend 100.000 sats per week: ``
 
 - ``payany-xpay-handle-pay`` If you want to let ``xpay`` handle ``pay`` you would usually set ``xpay-handle-pay`` but only one plugin is allowed to modify rpc commands so ``payany`` has to take over this job since it is already modifying rpc commands to both ``pay`` and ``xpay`` when fetching invoices for static lightning payment addresses. Default is `false`
 
-- ``payany-strict-lnurl`` Adhere strictly to ``LUD-06`` and ``LUD-16`` (concerning metadata checks and description/hash checks). Mostly for testing. Since alot of big lnurl services don't do this, this mode is disabled by default so you will not get an error and instead a log entry. Default is ``false``
+- ``payany-strict-lnurl`` Adhere strictly to ``LUD-06`` and ``LUD-16`` (concerning metadata checks). Mostly for testing. Since alot of big lnurl services don't do this, this mode is disabled by default so you will not get an error and instead a log entry. Default is ``false``
 
 ## Supported static lightning payment addresses:
 
