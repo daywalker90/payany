@@ -361,13 +361,16 @@ pub fn get_maxfee(
 }
 
 #[allow(clippy::similar_names)]
-pub async fn parse_pay_args(plugin: Plugin<PluginState>) -> Result<(), anyhow::Error> {
+pub async fn parse_pay_args(
+    plugin: &ConfiguredPlugin<PluginState, tokio::io::Stdin, tokio::io::Stdout>,
+    state: PluginState,
+) -> Result<(), anyhow::Error> {
     let mut rpc = ClnRpc::new(
         Path::new(&plugin.configuration().lightning_dir).join(plugin.configuration().rpc_file),
     )
     .await?;
 
-    let config = plugin.state().config.lock().clone();
+    let config = state.config.lock().clone();
 
     let help_pay = if config.ignore_deprecated_pays {
         Vec::new()
@@ -400,7 +403,7 @@ pub async fn parse_pay_args(plugin: Plugin<PluginState>) -> Result<(), anyhow::E
             Vec::new()
         };
 
-    let mut config = plugin.state().config.lock();
+    let mut config = state.config.lock();
 
     if let Some(hp) = help_pay.first() {
         for arg in hp.command.split(' ') {

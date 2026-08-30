@@ -97,72 +97,67 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         None => return Err(anyhow!("Error configuring payany!")),
     };
-    match confplugin.start(state).await {
-        Ok(plugin) => {
-            {
-                let mut rpc = ClnRpc::new(
-                    Path::new(&plugin.configuration().lightning_dir)
-                        .join(plugin.configuration().rpc_file),
-                )
-                .await?;
 
-                let cln_version = rpc.call_typed(&GetinfoRequest {}).await?.version;
+    {
+        let mut rpc = ClnRpc::new(
+            Path::new(&confplugin.configuration().lightning_dir)
+                .join(confplugin.configuration().rpc_file),
+        )
+        .await?;
 
-                let listconfigs = rpc
-                    .call_typed(&ListconfigsRequest { config: None })
-                    .await?
-                    .configs
-                    .ok_or_else(|| anyhow!("No `configs` found in listconfigs response"))?;
+        let cln_version = rpc.call_typed(&GetinfoRequest {}).await?.version;
 
-                let mut config = plugin.state().config.lock();
-                config.version = cln_version;
+        let listconfigs = rpc
+            .call_typed(&ListconfigsRequest { config: None })
+            .await?
+            .configs
+            .ok_or_else(|| anyhow!("No `configs` found in listconfigs response"))?;
 
-                config.tor_proxy = if let Some(proxy_config) = listconfigs.proxy {
-                    if let Some(always_use_proxy_config) = listconfigs.always_use_proxy {
-                        if always_use_proxy_config.value_bool {
-                            log::info!("Using tor proxy: {}", proxy_config.value_str);
-                            Some(proxy_config.value_str)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
+        let mut config = state.config.lock();
+        config.version = cln_version;
+
+        config.tor_proxy = if let Some(proxy_config) = listconfigs.proxy {
+            if let Some(always_use_proxy_config) = listconfigs.always_use_proxy {
+                if always_use_proxy_config.value_bool {
+                    log::info!("Using tor proxy: {}", proxy_config.value_str);
+                    Some(proxy_config.value_str)
                 } else {
                     None
-                };
-
-                let allow_deprecated_apis =
-                    if let Some(deprecated_apis_config) = listconfigs.allow_deprecated_apis {
-                        deprecated_apis_config.value_bool
-                    } else {
-                        true
-                    };
-
-                config.ignore_deprecated_pays = (at_or_above_version(&config.version, "26.06")?
-                    && !allow_deprecated_apis)
-                    || at_or_above_version(&config.version, "27.03")?;
-            }
-            match parse_pay_args(plugin.clone()).await {
-                Ok(()) => (),
-                Err(e) => {
-                    println!(
-                        "{}",
-                        serde_json::json!({"jsonrpc": "2.0",
-                                    "method": "log",
-                                    "params": {"level":"warn",
-                                    "message":format!("Error parsing pay args: {}", e)}})
-                    );
-                    return Err(e);
                 }
+            } else {
+                None
             }
-            match check_handle_option(plugin.clone()).await {
-                Ok(()) => (),
-                Err(e) => log::info!("{e}"),
-            }
-            log::debug!("ready");
-            plugin.join().await
+        } else {
+            None
+        };
+
+        let allow_deprecated_apis =
+            if let Some(deprecated_apis_config) = listconfigs.allow_deprecated_apis {
+                deprecated_apis_config.value_bool
+            } else {
+                true
+            };
+
+        config.ignore_deprecated_pays = (at_or_above_version(&config.version, "26.06")?
+            && !allow_deprecated_apis)
+            || at_or_above_version(&config.version, "27.03")?;
+    }
+    match parse_pay_args(&confplugin, state.clone()).await {
+        Ok(()) => (),
+        Err(e) => {
+            return confplugin
+                .disable(&format!("Error parsing pay args: {e}"))
+                .await;
         }
+    }
+    match check_handle_option(&confplugin, state.clone()).await {
+        Ok(()) => (),
+        Err(e) => log::info!("{e}"),
+    }
+    log::debug!("ready");
+
+    match confplugin.start(state).await {
+        Ok(plugin) => plugin.join().await,
         _ => Err(anyhow!("Error starting payany!")),
     }
 }

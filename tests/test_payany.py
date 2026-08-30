@@ -14,7 +14,15 @@ LOGGER = logging.getLogger(__name__)
 
 
 def test_payany_with_offer_and_bi353(node_factory, get_plugin):  # noqa: F811
-    opts = [{"plugin": get_plugin, "log-level": "debug"}, {"log-level": "debug"}]
+    opts = [
+        {
+            "plugin": get_plugin,
+            "payany-budget-per": "5 hours",
+            "payany-budget-amount-msat": 1000000,
+            "log-level": "debug",
+        },
+        {"log-level": "debug"},
+    ]
 
     l1, l2 = node_factory.line_graph(
         2,
@@ -42,6 +50,8 @@ def test_payany_with_offer_and_bi353(node_factory, get_plugin):  # noqa: F811
         },
     )
     assert result["invoice"] == "test@notalnurlserver.gz"
+
+    l1.rpc.call("xpay", [offer["bolt12"], 3_000])
 
 
 def test_xpay_supercharged(node_factory, get_plugin, lnurl_server):  # noqa: F811
@@ -105,6 +115,25 @@ def test_pay_supercharged(
 
     with pytest.raises(RpcError, match="missing required parameter"):
         result = l1.rpc.call("pay", [])
+
+    l1.rpc.call("plugin", ["stop", "payany"])
+    l1.rpc.call(
+        "plugin",
+        {
+            "subcommand": "start",
+            "plugin": str(get_plugin),
+            "payany-budget-per": "5 hours",
+            "payany-budget-amount-msat": 1000000,
+        },
+    )
+
+    result = l1.rpc.call(
+        "pay", {"bolt11": lnurl, "amount_msat": 3_001, "message": "test4"}
+    )
+    assert result["amount_msat"] == 3_001
+    pay = l2.rpc.call("listinvoices", {})["invoices"]
+    assert pay[2]["amount_msat"] == 3_001
+    assert pay[2]["description"] == "test4"
 
 
 @pytest.mark.asyncio
