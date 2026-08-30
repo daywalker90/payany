@@ -1,13 +1,13 @@
 use anyhow::{Error, anyhow};
 use cln_plugin::Plugin;
 use cln_rpc::RpcError;
-use serde_json::json;
+use serde_json::{Map, json};
 
 use crate::{
     budget::budget_check,
     fetch::resolve_invstring,
     parse::convert_pay_to_xpay,
-    structs::{ParamValue, Paycmd, PluginState, RpcCommand},
+    structs::{Config, ParamValue, Paycmd, PluginState, RpcCommand},
 };
 
 pub async fn hook_handler(
@@ -72,6 +72,14 @@ pub async fn hook_handler(
             })}}));
         }
     }
+
+    if let Err(e) = handle_lno_message(paycmd, &config, &mut params_as_object) {
+        return Ok(json!({"return":{"error":json!(RpcError {
+            code: Some(-32602),
+            message: format!("payany: {e}"),
+            data: None,
+        })}}));
+    }
     params_as_object.remove("message");
 
     if let Err(e) = budget_check(plugin.clone(), &params_as_object, paycmd).await {
@@ -103,6 +111,40 @@ pub async fn hook_handler(
     "params":params_as_object}});
     log::debug!("{result}");
     Ok(result)
+}
+
+fn handle_lno_message(
+    paycmd: Paycmd,
+    config: &Config,
+    params: &mut Map<String, serde_json::Value>,
+) -> Result<(), anyhow::Error> {
+    let invstring = params
+        .get("invstring")
+        .or_else(|| params.get("bolt11"))
+        .and_then(|v| v.as_str());
+    if invstring.is_none() || !invstring.unwrap().to_lowercase().starts_with("lno") {
+        return Ok(());
+    }
+    if !params.contains_key("message") {
+        return Ok(());
+    }
+    if params.contains_key("payer_note") {
+        return Err(anyhow!("cannot set both message and payer_note"));
+    }
+    let args = match paycmd {
+        Paycmd::Pay => &config.payargs,
+        Paycmd::Xpay => &config.xpayargs,
+        Paycmd::Renepay => &config.renepayargs,
+    };
+    if !args.iter().any(|a| a.eq("payer_note")) {
+        return Err(anyhow!(
+            "message for offers requires the `payer_note` argument, upgrade CLN to v26.04 and \
+            use `xpay` to support it"
+        ));
+    }
+    let message = params.remove("message").unwrap();
+    params.insert("payer_note".to_owned(), message);
+    Ok(())
 }
 
 fn check_setconfig(param_val: ParamValue) -> Result<(), anyhow::Error> {
