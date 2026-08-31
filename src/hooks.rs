@@ -42,11 +42,14 @@ pub async fn hook_handler(
 
     let config = plugin.state().config.lock().clone();
 
-    if config.ignore_deprecated_pays {
-        match paycmd {
-            Paycmd::Xpay => (),
-            Paycmd::Pay | Paycmd::Renepay => return Ok(json!({"result":"continue"})),
-        }
+    let args_ready = match paycmd {
+        Paycmd::Pay => !config.payargs.is_empty(),
+        Paycmd::Xpay => !config.xpayargs.is_empty(),
+        Paycmd::Renepay => !config.renepayargs.is_empty(),
+    };
+    if !args_ready {
+        log::debug!("{paycmd:?} not available, passing through");
+        return Ok(json!({"result":"continue"}));
     }
 
     let mut params_as_object = match root.rpc_command.params.to_object(paycmd, &config) {

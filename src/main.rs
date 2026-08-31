@@ -10,15 +10,13 @@ use cln_plugin::{
 };
 use cln_rpc::{
     ClnRpc,
-    model::requests::{GetinfoRequest, ListconfigsRequest},
+    model::requests::ListconfigsRequest,
 };
 use hooks::hook_handler;
 use parse::{get_startup_options, parse_pay_args, setconfig_callback};
 use rpc::payany;
 use structs::PluginState;
 use util::check_handle_option;
-
-use crate::util::at_or_above_version;
 
 mod budget;
 mod fetch;
@@ -105,8 +103,6 @@ async fn main() -> Result<(), anyhow::Error> {
         )
         .await?;
 
-        let cln_version = rpc.call_typed(&GetinfoRequest {}).await?.version;
-
         let listconfigs = rpc
             .call_typed(&ListconfigsRequest { config: None })
             .await?
@@ -114,7 +110,6 @@ async fn main() -> Result<(), anyhow::Error> {
             .ok_or_else(|| anyhow!("No `configs` found in listconfigs response"))?;
 
         let mut config = state.config.lock();
-        config.version = cln_version;
 
         config.tor_proxy = if let Some(proxy_config) = listconfigs.proxy {
             if let Some(always_use_proxy_config) = listconfigs.always_use_proxy {
@@ -130,17 +125,6 @@ async fn main() -> Result<(), anyhow::Error> {
         } else {
             None
         };
-
-        let allow_deprecated_apis =
-            if let Some(deprecated_apis_config) = listconfigs.allow_deprecated_apis {
-                deprecated_apis_config.value_bool
-            } else {
-                true
-            };
-
-        config.ignore_deprecated_pays = (at_or_above_version(&config.version, "26.06")?
-            && !allow_deprecated_apis)
-            || at_or_above_version(&config.version, "27.03")?;
     }
     match parse_pay_args(&confplugin, state.clone()).await {
         Ok(()) => (),
@@ -150,7 +134,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 .await;
         }
     }
-    match check_handle_option(&confplugin, state.clone()).await {
+    match check_handle_option(&confplugin).await {
         Ok(()) => (),
         Err(e) => log::info!("{e}"),
     }
