@@ -35,12 +35,10 @@ pub struct Config {
     pub xpayargs: Vec<String>,
     pub renepayargs: Vec<String>,
     pub strict_lnurl: bool,
-    pub version: String,
-    pub ignore_deprecated_pays: bool,
     pub tor_proxy: Option<String>,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Paycmd {
     Pay,
     Xpay,

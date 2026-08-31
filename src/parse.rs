@@ -24,7 +24,6 @@ use crate::{
     OPT_PAYANY_STRICT_LNURL,
     PluginState,
     structs::{Config, TimeUnit},
-    util::at_or_above_version,
 };
 
 fn parse_time_period(input: &str) -> Result<u64, anyhow::Error> {
@@ -391,38 +390,38 @@ pub async fn parse_pay_args(
     )
     .await?;
 
-    let config = state.config.lock().clone();
-
-    let help_pay = if config.ignore_deprecated_pays {
-        Vec::new()
-    } else {
-        rpc.call_typed(&HelpRequest {
+    let help_pay = match rpc
+        .call_typed(&HelpRequest {
             command: Some("pay".to_owned()),
         })
-        .await?
-        .help
+        .await
+    {
+        Ok(r) => r.help,
+        Err(e) => {
+            log::info!("`pay` command not available, not intercepting it: {e}");
+            Vec::new()
+        }
     };
 
-    let help_xpay = if at_or_above_version(&config.version, "24.11")? {
-        rpc.call_typed(&HelpRequest {
+    let help_xpay = rpc
+        .call_typed(&HelpRequest {
             command: Some("xpay".to_owned()),
         })
         .await?
-        .help
-    } else {
-        Vec::new()
-    };
+        .help;
 
-    let help_renepay =
-        if at_or_above_version(&config.version, "23.08")? && !config.ignore_deprecated_pays {
-            rpc.call_typed(&HelpRequest {
-                command: Some("renepay".to_owned()),
-            })
-            .await?
-            .help
-        } else {
+    let help_renepay = match rpc
+        .call_typed(&HelpRequest {
+            command: Some("renepay".to_owned()),
+        })
+        .await
+    {
+        Ok(r) => r.help,
+        Err(e) => {
+            log::info!("`renepay` command not available, not intercepting it: {e}");
             Vec::new()
-        };
+        }
+    };
 
     let mut config = state.config.lock();
 
@@ -479,10 +478,8 @@ pub async fn parse_pay_args(
     }
 
     log::debug!("xpayargs:{}", config.xpayargs.join(" "));
-    if !config.ignore_deprecated_pays {
-        log::debug!("payargs:{}", config.payargs.join(" "));
-        log::debug!("renepayargs:{}", config.renepayargs.join(" "));
-    }
+    log::debug!("payargs:{}", config.payargs.join(" "));
+    log::debug!("renepayargs:{}", config.renepayargs.join(" "));
     Ok(())
 }
 
