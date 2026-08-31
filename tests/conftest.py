@@ -1,6 +1,4 @@
-from pyln.client import NodeVersion
 import pytest
-import subprocess
 import json
 import threading
 from aiohttp import web
@@ -9,38 +7,14 @@ import pytest_asyncio
 import asyncio
 
 
-def get_cln_version():
-    cln_version_proc = subprocess.check_output(["lightningd", "--version"])
-    cln_version = NodeVersion(cln_version_proc.decode("ascii").strip())
-
-    return cln_version
+@pytest.fixture(scope="session", autouse=True)
+def pay_renepay_deprecated():
+    return True
 
 
-def pytest_configure(config):
-    if not hasattr(config, "workerinput"):
-        config.pay_renepay_deprecated = get_cln_version() >= NodeVersion("v26.06")
-        config.xpay_payer_note_added = get_cln_version() >= NodeVersion("v26.04")
-
-
-def pytest_configure_node(node):
-    node.workerinput["pay_renepay_deprecated"] = node.config.pay_renepay_deprecated
-    node.workerinput["xpay_payer_note_added"] = node.config.xpay_payer_note_added
-
-
-@pytest.fixture(scope="session")
-def pay_renepay_deprecated(request):
-    if hasattr(request.config, "workerinput"):
-        return request.config.workerinput["pay_renepay_deprecated"]
-
-    return request.config.pay_renepay_deprecated
-
-
-@pytest.fixture(scope="session")
-def xpay_payer_note_added(request):
-    if hasattr(request.config, "workerinput"):
-        return request.config.workerinput["xpay_payer_note_added"]
-
-    return request.config.xpay_payer_note_added
+@pytest.fixture(scope="session", autouse=True)
+def xpay_payer_note_added():
+    return True
 
 
 def encode_lnurl(url: str) -> str:
