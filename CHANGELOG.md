@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.3.3] 2026-09-01
+## [0.4.0] 2026-09-01
 
 ### Changed
 - startup: payany checks its command arguments before it starts. It disables itself with an error message when a check fails.
@@ -22,6 +22,10 @@
 - bolt12 offers: the ``message`` argument is now forwarded as ``payer_note`` when the command supports it. Setting both ``message`` and ``payer_note`` returns an error. A ``message`` on a command without the ``payer_note`` argument returns an error that asks you to upgrade CLN.
 - lnaddress: only exact ``localhost``/``127.0.0.1``/``[::1]`` hosts are fetched via ``http``, any other domain that merely contains them (e.g. ``mylocalhost.com``) is fetched via ``https``. ``.onion`` addresses are fetched via ``http`` so they work when CLN is configured to use tor.
 - budget: ``payany-budget-per`` is now parsed strictly, values like ``garbage1week``, ``1week extra`` or ``1.5h`` are rejected instead of being silently accepted. The time period is checked for overflow and absurd values can no longer wrap around and disable the budget check.
+
+### Removed
+- CLN versions `<v26.06` are no longer supported, `v25.09` especially no longer works
+
 
 ## [0.3.2] 2026-06-09
 
