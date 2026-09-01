@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.3] 2026-09-01
 
 ### Changed
 - startup: payany checks its command arguments before it starts. It disables itself with an error message when a check fails.
