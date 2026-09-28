@@ -1,6 +1,7 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc, time::Instant};
 
 use anyhow::anyhow;
+use bitreq::Proxy;
 use cln_rpc::primitives::Amount;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -35,7 +36,7 @@ pub struct Config {
     pub xpayargs: Vec<String>,
     pub renepayargs: Vec<String>,
     pub strict_lnurl: bool,
-    pub tor_proxy: Option<String>,
+    pub tor_proxy: Option<Proxy>,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]

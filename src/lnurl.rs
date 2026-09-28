@@ -1,13 +1,14 @@
 use std::{path::Path, time::Duration};
 
 use anyhow::{Context, Error, anyhow};
+use bitreq::Url;
 use cln_plugin::Plugin;
 use cln_rpc::{ClnRpc, model::requests::DecodeRequest, primitives::Amount};
 use serde_json::Map;
 
 use crate::structs::{Config, LnurlpCallback, LnurlpConfig, PluginState};
 
-fn is_lud01_url(url: &reqwest::Url) -> bool {
+fn is_lud01_url(url: &bitreq::Url) -> bool {
     let scheme = url.scheme();
     if scheme == "https" {
         return true;
@@ -15,7 +16,7 @@ fn is_lud01_url(url: &reqwest::Url) -> bool {
     if scheme != "http" {
         return false;
     }
-    let host = url.host_str().unwrap_or("");
+    let host = url.base_url();
     let host = host.trim_end_matches('.').to_ascii_lowercase();
     host == "localhost" || host == "127.0.0.1" || host == "[::1]" || host.ends_with(".onion")
 }
@@ -27,39 +28,31 @@ pub async fn try_fetch_lnurl(
     amount_msat: Amount,
     message: Option<String>,
 ) -> Result<LnurlpCallback, Error> {
-    let client = if let Some(tp) = &config.tor_proxy {
-        let proxy = reqwest::Proxy::all(format!("socks5h://{tp}"))?;
-        reqwest::Client::builder()
-            .proxy(proxy)
-            .timeout(Duration::from_secs(30))
-            .build()?
-    } else {
-        reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()?
-    };
-    let lnurlp_config_raw = match client.get(config_url).send().await {
+    let mut request_config = bitreq::get(config_url).with_timeout(Duration::from_secs(30));
+    if let Some(proxy) = &config.tor_proxy {
+        request_config = request_config.with_proxy(proxy.clone());
+    }
+    let lnurlp_config_raw = match request_config.send_async().await {
         Ok(o) => o,
         Err(e) => {
             log::warn!("LNURL: failed to fetch lnurl config: {e:?}");
             return Err(anyhow!(e));
         }
     };
-    if !lnurlp_config_raw.status().is_success() {
+    if lnurlp_config_raw.status_code < 200 || lnurlp_config_raw.status_code > 299 {
         return Err(anyhow!(
             "LNURL: got bad status for lnurl config: {}",
-            lnurlp_config_raw.status()
+            lnurlp_config_raw.status_code
         ));
     }
     log::debug!("lnurl config: {lnurlp_config_raw:?}");
     let lnurlp_config = lnurlp_config_raw
         .json::<LnurlpConfig>()
-        .await
         .context("Not a valid LNURL config response")?;
 
     validate_lnurl_config(&lnurlp_config, amount_msat, lnaddress, config.strict_lnurl)?;
 
-    let mut callback_url = reqwest::Url::parse(&lnurlp_config.callback)?;
+    let mut callback_url = bitreq::Url::parse(&lnurlp_config.callback)?;
     if !is_lud01_url(&callback_url) {
         return Err(anyhow!(
             "LNURL callback must be an https:// clearnet link or an http:// onion link, got {}",
@@ -67,14 +60,13 @@ pub async fn try_fetch_lnurl(
         ));
     }
     {
-        let mut query_pairs = callback_url.query_pairs_mut();
-        query_pairs.append_pair("amount", &amount_msat.msat().to_string());
+        callback_url.append_query_params([("amount", amount_msat.msat().to_string().as_str())]);
         if let Some(msg) = message {
             let comment_length = lnurlp_config
                 .comment_allowed
                 .ok_or_else(|| anyhow!("LNURL: message not supported for this address!"))?;
             if comment_length >= msg.chars().count() as u64 {
-                query_pairs.append_pair("comment", &msg);
+                callback_url.append_query_params([("comment", msg.as_str())]);
             } else {
                 return Err(anyhow!(
                     "LNURL: message too long for this address! {}>{}",
@@ -84,14 +76,20 @@ pub async fn try_fetch_lnurl(
             }
         }
     }
-    let callback_response_raw = client.get(callback_url).send().await?;
-    if !callback_response_raw.status().is_success() {
+
+    let mut request_callback =
+        bitreq::get(callback_url.as_str()).with_timeout(Duration::from_secs(30));
+    if let Some(proxy) = &config.tor_proxy {
+        request_callback = request_callback.with_proxy(proxy.clone());
+    }
+    let callback_response_raw = request_callback.send_async().await?;
+    if callback_response_raw.status_code < 200 || callback_response_raw.status_code > 299 {
         return Err(anyhow!(
             "LNURL: got bad status for invoice: {}",
-            callback_response_raw.status()
+            callback_response_raw.status_code
         ));
     }
-    let callback_response = callback_response_raw.json::<LnurlpCallback>().await?;
+    let callback_response = callback_response_raw.json::<LnurlpCallback>()?;
     Ok(callback_response)
 }
 
@@ -225,7 +223,7 @@ pub async fn resolve_lnurl(
     let config_url = String::from_utf8(config_url_bytes)?;
     log::debug!("lnurl hrp:{hrp} url:{config_url}");
 
-    let parsed = reqwest::Url::parse(&config_url)?;
+    let parsed = Url::parse(&config_url)?;
     if !is_lud01_url(&parsed) {
         return Err(anyhow!(
             "LNURL must be an https:// clearnet link or an http:// onion link, got {config_url}"
@@ -246,19 +244,47 @@ mod tests {
 
     #[test]
     fn test_is_lud01_url() {
-        assert!(is_lud01_url(&"https://service.com/api?q=1".parse().unwrap()));
-        assert!(is_lud01_url(&"https://sub.example.org/x".parse().unwrap()));
-        assert!(is_lud01_url(&"http://abcdefghijklmnop.onion/x".parse().unwrap()));
-        assert!(is_lud01_url(&"http://abcdefghijklmnop.onion:8080/x".parse().unwrap()));
-        assert!(is_lud01_url(&"http://localhost:9737/x".parse().unwrap()));
-        assert!(is_lud01_url(&"http://localhost./x".parse().unwrap()));
-        assert!(is_lud01_url(&"http://127.0.0.1:8081/x".parse().unwrap()));
-        assert!(is_lud01_url(&"http://[::1]:8080/x".parse().unwrap()));
-        assert!(!is_lud01_url(&"http://service.com/x".parse().unwrap()));
-        assert!(!is_lud01_url(&"http://service.com.onion.evil.com/x".parse().unwrap()));
-        assert!(!is_lud01_url(&"http://notonion.com/x".parse().unwrap()));
-        assert!(!is_lud01_url(&"http://mylocalhost.com/x".parse().unwrap()));
-        assert!(!is_lud01_url(&"http://127.0.0.1.evil.com/x".parse().unwrap()));
-        assert!(!is_lud01_url(&"ftp://service.com/x".parse().unwrap()));
+        assert!(is_lud01_url(
+            &bitreq::Url::parse("https://service.com/api?q=1").unwrap()
+        ));
+        assert!(is_lud01_url(
+            &bitreq::Url::parse("https://sub.example.org/x").unwrap()
+        ));
+        assert!(is_lud01_url(
+            &bitreq::Url::parse("http://abcdefghijklmnop.onion/x").unwrap()
+        ));
+        assert!(is_lud01_url(
+            &bitreq::Url::parse("http://abcdefghijklmnop.onion:8080/x").unwrap()
+        ));
+        assert!(is_lud01_url(
+            &bitreq::Url::parse("http://localhost:9737/x").unwrap()
+        ));
+        assert!(is_lud01_url(
+            &bitreq::Url::parse("http://localhost./x").unwrap()
+        ));
+        assert!(is_lud01_url(
+            &bitreq::Url::parse("http://127.0.0.1:8081/x").unwrap()
+        ));
+        assert!(is_lud01_url(
+            &bitreq::Url::parse("http://[::1]:8080/x").unwrap()
+        ));
+        assert!(!is_lud01_url(
+            &bitreq::Url::parse("http://service.com/x").unwrap()
+        ));
+        assert!(!is_lud01_url(
+            &bitreq::Url::parse("http://service.com.onion.evil.com/x").unwrap()
+        ));
+        assert!(!is_lud01_url(
+            &bitreq::Url::parse("http://notonion.com/x").unwrap()
+        ));
+        assert!(!is_lud01_url(
+            &bitreq::Url::parse("http://mylocalhost.com/x").unwrap()
+        ));
+        assert!(!is_lud01_url(
+            &bitreq::Url::parse("http://127.0.0.1.evil.com/x").unwrap()
+        ));
+        assert!(!is_lud01_url(
+            &bitreq::Url::parse("ftp://service.com/x").unwrap()
+        ));
     }
 }

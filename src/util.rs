@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::anyhow;
+use bitreq::Proxy;
 use cln_plugin::ConfiguredPlugin;
 use cln_rpc::{ClnRpc, model::requests::SetconfigRequest};
 use serde_json::json;
@@ -44,4 +45,23 @@ pub async fn check_handle_option(
         log::info!("Found activated `xpay-handle-pay`, `payany` deactivated it!");
     }
     Ok(())
+}
+
+pub fn get_proxy(
+    plugin: &ConfiguredPlugin<PluginState, tokio::io::Stdin, tokio::io::Stdout>,
+) -> Result<Option<Proxy>, anyhow::Error> {
+    let Some(use_proxy) = plugin.configuration().always_use_proxy else {
+        return Ok(None);
+    };
+    if !use_proxy {
+        return Ok(None);
+    }
+
+    let Some(proxy_info) = plugin.configuration().proxy else {
+        return Ok(None);
+    };
+    Ok(Some(Proxy::new_socks5(format!(
+        "socks5h://{}:{}",
+        proxy_info.address, proxy_info.port
+    ))?))
 }

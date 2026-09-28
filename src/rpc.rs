@@ -31,5 +31,5 @@ pub async fn payany(
             return Err(anyhow!(e.to_string()));
         }
     }
-    Ok(json!({"invoice":format!("{}", params.get("invstring").unwrap().as_str().unwrap())}))
+    Ok(json!({"invoice":params.get("invstring").unwrap().as_str().unwrap().to_string()}))
 }

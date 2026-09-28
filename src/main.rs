@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use anyhow::anyhow;
 use cln_plugin::{
     Builder,
@@ -8,15 +6,13 @@ use cln_plugin::{
     RpcMethodBuilder,
     options::{DefaultBooleanConfigOption, IntegerConfigOption, StringConfigOption},
 };
-use cln_rpc::{
-    ClnRpc,
-    model::requests::ListconfigsRequest,
-};
 use hooks::hook_handler;
 use parse::{get_startup_options, parse_pay_args, setconfig_callback};
 use rpc::payany;
 use structs::PluginState;
 use util::check_handle_option;
+
+use crate::util::get_proxy;
 
 mod budget;
 mod fetch;
@@ -36,7 +32,6 @@ const OPT_PAYANY_STRICT_LNURL: &str = "payany-strict-lnurl";
 async fn main() -> Result<(), anyhow::Error> {
     unsafe { std::env::set_var("CLN_PLUGIN_LOG", "payany=trace,info") };
     log_panics::init();
-    let _ = rustls::crypto::ring::default_provider().install_default();
 
     let state = PluginState::default();
 
@@ -96,36 +91,16 @@ async fn main() -> Result<(), anyhow::Error> {
         None => return Err(anyhow!("Error configuring payany!")),
     };
 
-    {
-        let mut rpc = ClnRpc::new(
-            Path::new(&confplugin.configuration().lightning_dir)
-                .join(confplugin.configuration().rpc_file),
-        )
-        .await?;
+    let proxy = match get_proxy(&confplugin) {
+        Ok(p) => p,
+        Err(e) => {
+            return confplugin
+                .disable(&format!("Error getting proxy: {e}"))
+                .await;
+        }
+    };
+    state.config.lock().tor_proxy = proxy;
 
-        let listconfigs = rpc
-            .call_typed(&ListconfigsRequest { config: None })
-            .await?
-            .configs
-            .ok_or_else(|| anyhow!("No `configs` found in listconfigs response"))?;
-
-        let mut config = state.config.lock();
-
-        config.tor_proxy = if let Some(proxy_config) = listconfigs.proxy {
-            if let Some(always_use_proxy_config) = listconfigs.always_use_proxy {
-                if always_use_proxy_config.value_bool {
-                    log::info!("Using tor proxy: {}", proxy_config.value_str);
-                    Some(proxy_config.value_str)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-    }
     match parse_pay_args(&confplugin, state.clone()).await {
         Ok(()) => (),
         Err(e) => {
