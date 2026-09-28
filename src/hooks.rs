@@ -65,7 +65,7 @@ pub async fn hook_handler(
     log::debug!("params_obj: {params_as_object:?}");
 
     match resolve_invstring(plugin.clone(), &mut params_as_object).await {
-        Ok(o) => o,
+        Ok(_) => {}
         Err(e) => {
             params_as_object.remove("message");
             return Ok(json!({"return": {"error":json!(RpcError {

@@ -17,10 +17,20 @@ use crate::{
     structs::{Config, PluginState, URI_SCHEMES},
 };
 
+#[derive(Debug)]
+pub enum ResolveOutcome {
+    /// The invstring was resolved and is ready to be used, or needs no further
+    /// action from the caller.
+    Resolved,
+    /// Resolution was skipped, but the caller may still fall back to another
+    /// mechanism (e.g. BIP353) with the original invstring. Carries the reason.
+    Fallback(Error),
+}
+
 pub async fn resolve_invstring(
     plugin: Plugin<PluginState>,
     params: &mut Map<String, serde_json::Value>,
-) -> Result<(), Error> {
+) -> Result<ResolveOutcome, Error> {
     let invstring_name = if params.get("invstring").is_some() {
         "invstring"
     } else if params.get("bolt11").is_some() {
@@ -75,7 +85,8 @@ pub async fn resolve_invstring(
             message,
             params,
         )
-        .await;
+        .await
+        .map(|()| ResolveOutcome::Resolved);
     } else if invstring_lower.contains('@') {
         log::debug!("lnaddress detected");
         if amount_msat.is_none() {
@@ -92,10 +103,10 @@ pub async fn resolve_invstring(
         .await;
     } else if invstring_lower.starts_with("lno") {
         log::debug!("regular bolt12 offer forwarded");
-        return Ok(());
+        return Ok(ResolveOutcome::Resolved);
     }
     log::debug!("regular invoice forwarded");
-    Ok(())
+    Ok(ResolveOutcome::Resolved)
 }
 
 pub async fn resolve_offer_invoice(
@@ -258,7 +269,7 @@ async fn resolve_lnaddress(
     amount_msat: Amount,
     message: Option<String>,
     params: &mut Map<String, serde_json::Value>,
-) -> Result<(), Error> {
+) -> Result<ResolveOutcome, Error> {
     let address_parts = lnaddress.split('@').collect::<Vec<&str>>();
 
     if address_parts.len() != 2 {
@@ -285,13 +296,13 @@ async fn resolve_lnaddress(
         Ok(cb) => cb,
         Err(e) => {
             log::info!("Error fetching lnurlp config: {e}, trying bip353 instead...");
-            return Ok(());
+            return Ok(ResolveOutcome::Fallback(e));
         }
     };
 
     match process_lnurl_invoice(plugin, invstring_name, lnurlp_callback, amount_msat, params).await
     {
-        Ok(lnurl) => Ok(lnurl),
+        Ok(()) => Ok(ResolveOutcome::Resolved),
         Err(lnurl_error) => Err(anyhow!("Error fetching invoice from lnurl: {lnurl_error}")),
     }
 }
