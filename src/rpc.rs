@@ -2,7 +2,10 @@ use anyhow::{Error, anyhow};
 use cln_plugin::Plugin;
 use serde_json::{Map, json};
 
-use crate::{PluginState, fetch::resolve_invstring};
+use crate::{
+    PluginState,
+    fetch::{ResolveOutcome, resolve_invstring},
+};
 
 const PAYANYARGS: [&str; 3] = ["invstring", "amount_msat", "message"];
 
@@ -25,8 +28,8 @@ pub async fn payany(
         return Err(anyhow!("missing `invstring`"));
     }
     match resolve_invstring(plugin, &mut params).await {
-        Ok(o) => o,
-        Err(e) => {
+        Ok(ResolveOutcome::Resolved) => {}
+        Ok(ResolveOutcome::Fallback(e)) | Err(e) => {
             params.remove("message");
             return Err(anyhow!(e.to_string()));
         }
