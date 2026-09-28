@@ -16,17 +16,10 @@ cln-rpc = "0.7"
 cln-plugin = "0.7"
 # cln-plugin = { path = "../lightning/plugins/", version = "^0.6" }
 
-reqwest = { version = "0.13", default-features = false, features = [
-    "http2",
-    "json",
-    "rustls-no-provider",
-    "socks",
-] }
-rustls = { version = "0.23", default-features = false, features = [
-    "logging",
-    "tls12",
-    "std",
-    "ring",
+bitreq = { version = "0.4", features = [
+    "async-https-rustls",
+    "json-using-serde",
+    "proxy",
 ] }
 
 tokio-socks = "0.5"

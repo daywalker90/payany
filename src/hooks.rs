@@ -76,8 +76,7 @@ pub async fn hook_handler(
         }
     }
 
-    if let Err(e) = resolve_offer_invoice(plugin.clone(), &config, &mut params_as_object).await
-    {
+    if let Err(e) = resolve_offer_invoice(plugin.clone(), &config, &mut params_as_object).await {
         return Ok(json!({"return": {"error":json!(RpcError {
             code: Some(-32602),
             message: format!("payany could not fetch invoice: {e}"),
@@ -115,11 +114,11 @@ pub async fn hook_handler(
 
     let result = json!({"replace": {"jsonrpc":"2.0",
     "id": root.rpc_command.id,
-    "method":format!("{}",match paycmd{
+    "method":(match paycmd{
         Paycmd::Pay => "pay",
         Paycmd::Xpay => "xpay",
         Paycmd::Renepay=> "renepay"
-    }),
+    }).to_string(),
     "params":params_as_object}});
     log::debug!("{result}");
     Ok(result)
