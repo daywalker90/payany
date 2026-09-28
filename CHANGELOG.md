@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1] - 2026-09-28
+
+### Changed
+- replaced reqwest with bitreq
+
+### Fixed
+- show an actual error when `payany` was requested with a message on an LNURL that does not support comments
+
 ## [0.4.0] 2026-09-01
 
 ### Changed
