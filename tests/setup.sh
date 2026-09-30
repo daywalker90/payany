@@ -47,7 +47,7 @@ github_url="https://github.com/daywalker90/$name/releases/download/v$version/$ar
 
 
 # Download the archive using curl
-if ! curl -L "$github_url" -o "$script_dir/$archive_file"; then
+if ! curl -fL --retry 3 --retry-delay 3 "$github_url" -o "$script_dir/$archive_file"; then
     echo "Error downloading the file from $github_url" >&2
     exit 1
 fi
@@ -69,11 +69,11 @@ else
 fi
 
 # Need clnaddress for some tests
-CLNADDRESS_VERSION="0.1.2"
+CLNADDRESS_VERSION="0.1.5"
 CLNADDRESS_ARCHIVE="clnaddress-v$CLNADDRESS_VERSION-$platform_file_end"
 CLNADDRESS_FILE_URL="https://github.com/daywalker90/clnaddress/releases/download/v$CLNADDRESS_VERSION/$CLNADDRESS_ARCHIVE"
 
-if ! curl -L "$CLNADDRESS_FILE_URL" -o "$script_dir/$CLNADDRESS_ARCHIVE"; then
+if ! curl -fL --retry 3 --retry-delay 3 "$CLNADDRESS_FILE_URL" -o "$script_dir/$CLNADDRESS_ARCHIVE"; then
     echo "Error downloading the file from $CLNADDRESS_FILE_URL" >&2
     exit 1
 fi
