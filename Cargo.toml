@@ -22,8 +22,6 @@ bitreq = { version = "0.4", features = [
     "proxy",
 ] }
 
-tokio-socks = "0.5"
-
 bech32 = "0.12"
 
 regex = "1"
