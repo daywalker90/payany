@@ -314,11 +314,13 @@ def test_budget(
         )
 
 
-def test_handle_opt(node_factory, get_plugin):  # noqa: F811
+def test_handle_opt(node_factory, get_plugin, pay_renepay_deprecated):  # noqa: F811
     opts = {
         "xpay-handle-pay": True,
         "log-level": "debug",
     }
+    if pay_renepay_deprecated:
+        opts["allow-deprecated-apis"] = True
 
     l1 = node_factory.get_node(
         options=opts,

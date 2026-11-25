@@ -21,15 +21,19 @@ pub async fn check_handle_option(
     let raw_configs = listconfigs
         .get("configs")
         .ok_or_else(|| anyhow!("no configs object"))?;
-    let xpay_handle_pay = raw_configs
-        .get("xpay-handle-pay")
-        .ok_or_else(|| anyhow!("configs object missing xpay-handle-pay"))?;
-    let value_bool = xpay_handle_pay
-        .get("value_bool")
-        .ok_or_else(|| anyhow!("no value_bool in xpay_handle_pay"))?
-        .as_bool()
-        .unwrap();
-    if value_bool {
+    let should_disable = match raw_configs.get("xpay-handle-pay") {
+        Some(xpay_handle_pay) => xpay_handle_pay
+            .get("value_bool")
+            .ok_or_else(|| anyhow!("no value_bool in xpay_handle_pay"))?
+            .as_bool()
+            .unwrap(),
+        // Since CLN v26.12 `xpay-handle-pay` is deprecated and omitted from
+        // `listconfigs` when unset while still defaulting to `true`.
+        // Reaching here means `listconfigs` accepted the config name (so
+        // `allow-deprecated-apis` is enabled and `xpay-handle-pay` is active).
+        None => true,
+    };
+    if should_disable {
         tokio::spawn(async move {
             if let Err(e) = rpc
                 .call_typed(&SetconfigRequest {
